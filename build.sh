@@ -10,4 +10,5 @@ mcs -target:winexe -out:CodeEditor.exe \
     src/DarkMenuRenderer.cs \
     src/TestForm.Designer.cs \
     src/TestForm.cs \
-    src/Program.cs
+    src/Program.cs \
+    src/Properties/AssemblyInfo.cs
