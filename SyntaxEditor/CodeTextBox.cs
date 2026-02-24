@@ -349,14 +349,8 @@ namespace CodeEditor
             int firstLine = _scrollY;
             int lastLine = Math.Min(_doc.LineCount - 1, firstLine + VisibleLines);
 
-            if (_showLineNumbers)
-            {
-                using (var gutterBrush = new SolidBrush(_ruleset.LineNumberBackColor))
-                    g.FillRectangle(gutterBrush, 0, 0, _gutterWidth, ClientSize.Height);
-
-                using (var pen = new Pen(_ruleset.GutterSeparatorColor))
-                    g.DrawLine(pen, _gutterWidth - 1, 0, _gutterWidth - 1, ClientSize.Height);
-            }
+            var textClip = new Rectangle(_gutterWidth, 0, ClientSize.Width - _gutterWidth, ClientSize.Height);
+            g.SetClip(textClip);
 
             if (_highlightCurrentLine && _caret.Line >= firstLine && _caret.Line <= lastLine)
             {
@@ -371,17 +365,6 @@ namespace CodeEditor
             for (int i = firstLine; i <= lastLine; i++)
             {
                 float y = (i - _scrollY) * _lineHeight;
-
-                if (_showLineNumbers)
-                {
-                    string num = (i + 1).ToString();
-                    using (var brush = new SolidBrush(i == _caret.Line ? _ruleset.ActiveLineNumberColor : _ruleset.LineNumberForeColor))
-                    {
-                        float numX = _gutterWidth - GutterPadding - g.MeasureString(num, _editorFont, 0, StringFormat.GenericTypographic).Width;
-                        g.DrawString(num, _editorFont, brush, numX, y, StringFormat.GenericTypographic);
-                    }
-                }
-
                 PaintLineText(g, i, y);
             }
 
@@ -401,6 +384,27 @@ namespace CodeEditor
                 {
                     pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
                     g.DrawLine(pen, dx, dy, dx, dy + _lineHeight);
+                }
+            }
+
+            g.ResetClip();
+
+            if (_showLineNumbers)
+            {
+                using (var gutterBrush = new SolidBrush(_ruleset.LineNumberBackColor))
+                    g.FillRectangle(gutterBrush, 0, 0, _gutterWidth, ClientSize.Height);
+                using (var pen = new Pen(_ruleset.GutterSeparatorColor))
+                    g.DrawLine(pen, _gutterWidth - 1, 0, _gutterWidth - 1, ClientSize.Height);
+
+                for (int i = firstLine; i <= lastLine; i++)
+                {
+                    float y = (i - _scrollY) * _lineHeight;
+                    string num = (i + 1).ToString();
+                    using (var brush = new SolidBrush(i == _caret.Line ? _ruleset.ActiveLineNumberColor : _ruleset.LineNumberForeColor))
+                    {
+                        float numX = _gutterWidth - GutterPadding - g.MeasureString(num, _editorFont, 0, StringFormat.GenericTypographic).Width;
+                        g.DrawString(num, _editorFont, brush, numX, y, StringFormat.GenericTypographic);
+                    }
                 }
             }
         }
