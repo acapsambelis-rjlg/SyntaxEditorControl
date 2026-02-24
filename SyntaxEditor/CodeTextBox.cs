@@ -625,24 +625,16 @@ namespace CodeEditor
                     int actualLine = VisibleToActualLine(vi);
                     float y = (vi - _scrollY) * _lineHeight;
                     string line = _doc.GetLine(actualLine);
+                    bool isEmpty = line.TrimStart().Length == 0;
 
-                    int lineIndent = 0;
-                    for (int i = 0; i < line.Length; i++)
-                    {
-                        if (line[i] == ' ') lineIndent++;
-                        else if (line[i] == '\t') lineIndent += _tabSize;
-                        else break;
-                    }
+                    if (!isEmpty) continue;
 
-                    int contentIndentLevel = lineIndent / _tabSize;
-                    if (line.TrimStart().Length == 0)
-                    {
-                        int nextIndent = GetNextNonEmptyLineIndent(actualLine);
-                        int prevIndent = GetPrevNonEmptyLineIndent(actualLine);
-                        contentIndentLevel = Math.Max(nextIndent, prevIndent) / _tabSize;
-                    }
+                    int nextIndent = GetNextNonEmptyLineIndent(actualLine);
+                    int prevIndent = GetPrevNonEmptyLineIndent(actualLine);
+                    int guideIndent = Math.Min(nextIndent, prevIndent);
+                    int guideLevels = guideIndent / _tabSize;
 
-                    for (int level = 1; level <= contentIndentLevel; level++)
+                    for (int level = 1; level <= guideLevels; level++)
                     {
                         float x = _gutterWidth + TextLeftPadding + level * guideSpacing - _scrollX;
                         if (x > _gutterWidth && x < ClientSize.Width - _vScrollBar.Width)
