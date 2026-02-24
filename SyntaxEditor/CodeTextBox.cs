@@ -495,6 +495,7 @@ namespace CodeEditor
         {
             var colors = new Color[line.Length];
             var styles = new FontStyle[line.Length];
+            var claimed = new bool[line.Length];
             for (int i = 0; i < line.Length; i++)
             {
                 colors[i] = _ruleset.DefaultForeColor;
@@ -513,8 +514,12 @@ namespace CodeEditor
                     start = Math.Max(0, start);
                     for (int i = start; i < end; i++)
                     {
-                        colors[i] = span.ForeColor;
-                        styles[i] = span.Style;
+                        if (!claimed[i])
+                        {
+                            colors[i] = span.ForeColor;
+                            styles[i] = span.Style;
+                            claimed[i] = true;
+                        }
                     }
                 }
             }
