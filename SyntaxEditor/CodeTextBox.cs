@@ -654,7 +654,14 @@ namespace CodeEditor
                 Cursor = Cursors.IBeam;
 
                 var dropPos = PositionFromPoint(e.X, e.Y);
-                if (!IsPositionInSelection(dropPos))
+                if (IsPositionInSelection(dropPos))
+                {
+                    _caret = dropPos;
+                    ClearSelection();
+                    _desiredColumn = -1;
+                    ResetCaretBlink();
+                }
+                else
                 {
                     var range = GetSelectionRange();
                     _doc.BeginComposite(_caret);
