@@ -50,6 +50,7 @@ namespace CodeEditor
             public int EndCol;
             public Color ForeColor;
             public FontStyle Style;
+            public bool IsExclude;
         }
 
         private struct ColorRun
@@ -429,6 +430,31 @@ namespace CodeEditor
 
         #region Syntax Highlighting
 
+        private void OffsetToLineCol(int charOffset, int[] lineOffsets, out int line, out int col)
+        {
+            line = 0;
+            col = charOffset;
+            for (int i = 0; i < lineOffsets.Length; i++)
+            {
+                if (i == lineOffsets.Length - 1 || lineOffsets[i + 1] > charOffset)
+                {
+                    line = i;
+                    col = charOffset - lineOffsets[i];
+                    break;
+                }
+            }
+        }
+
+        private void AddSpan(MultiLineSpan span)
+        {
+            for (int ln = span.StartLine; ln <= span.EndLine; ln++)
+            {
+                if (!_multiLineSpans.ContainsKey(ln))
+                    _multiLineSpans[ln] = new List<MultiLineSpan>();
+                _multiLineSpans[ln].Add(span);
+            }
+        }
+
         private void RebuildMultiLineSpans()
         {
             if (!_multiLineDirty) return;
@@ -438,54 +464,52 @@ namespace CodeEditor
             if (_ruleset.Rules == null || _ruleset.Rules.Count == 0) return;
 
             string fullText = _doc.Text;
+
+            int[] lineOffsets = new int[_doc.LineCount];
+            int off = 0;
+            for (int i = 0; i < _doc.LineCount; i++)
+            {
+                lineOffsets[i] = off;
+                off += _doc.GetLineLength(i) + 1;
+            }
+
             foreach (var rule in _ruleset.Rules)
             {
                 var matches = rule.CompiledRegex.Matches(fullText);
                 foreach (Match m in matches)
                 {
-                    int startOffset = m.Index;
-                    int endOffset = m.Index + m.Length;
+                    int sLine, sCol, eLine, eCol;
+                    OffsetToLineCol(m.Index, lineOffsets, out sLine, out sCol);
+                    OffsetToLineCol(m.Index + m.Length, lineOffsets, out eLine, out eCol);
 
-                    int sLine = 0, sCol = startOffset;
-                    int offset = 0;
-                    for (int i = 0; i < _doc.LineCount; i++)
-                    {
-                        int lineLen = _doc.GetLineLength(i) + 1;
-                        if (offset + lineLen > startOffset)
-                        {
-                            sLine = i;
-                            sCol = startOffset - offset;
-                            break;
-                        }
-                        offset += lineLen;
-                    }
-
-                    int eLine = sLine, eCol = endOffset - offset;
-                    offset = 0;
-                    for (int i = 0; i < _doc.LineCount; i++)
-                    {
-                        int lineLen = _doc.GetLineLength(i) + 1;
-                        if (offset + lineLen > endOffset || i == _doc.LineCount - 1)
-                        {
-                            eLine = i;
-                            eCol = endOffset - offset;
-                            break;
-                        }
-                        offset += lineLen;
-                    }
-
-                    var span = new MultiLineSpan
+                    AddSpan(new MultiLineSpan
                     {
                         StartLine = sLine, StartCol = sCol,
                         EndLine = eLine, EndCol = eCol,
-                        ForeColor = rule.ForeColor, Style = rule.FontStyle
-                    };
+                        ForeColor = rule.ForeColor, Style = rule.FontStyle,
+                        IsExclude = false
+                    });
 
-                    for (int ln = sLine; ln <= eLine; ln++)
+                    if (rule.CompiledExclude != null)
                     {
-                        if (!_multiLineSpans.ContainsKey(ln))
-                            _multiLineSpans[ln] = new List<MultiLineSpan>();
-                        _multiLineSpans[ln].Add(span);
+                        string matchedText = m.Value;
+                        var excludeMatches = rule.CompiledExclude.Matches(matchedText);
+                        foreach (Match em in excludeMatches)
+                        {
+                            int exStart = m.Index + em.Index;
+                            int exEnd = exStart + em.Length;
+                            int exSLine, exSCol, exELine, exECol;
+                            OffsetToLineCol(exStart, lineOffsets, out exSLine, out exSCol);
+                            OffsetToLineCol(exEnd, lineOffsets, out exELine, out exECol);
+
+                            AddSpan(new MultiLineSpan
+                            {
+                                StartLine = exSLine, StartCol = exSCol,
+                                EndLine = exELine, EndCol = exECol,
+                                ForeColor = _ruleset.DefaultForeColor, Style = FontStyle.Regular,
+                                IsExclude = true
+                            });
+                        }
                     }
                 }
             }
@@ -512,13 +536,26 @@ namespace CodeEditor
                     int end = (lineIndex == span.EndLine) ? span.EndCol : line.Length;
                     end = Math.Min(end, line.Length);
                     start = Math.Max(0, start);
-                    for (int i = start; i < end; i++)
+
+                    if (span.IsExclude)
                     {
-                        if (!claimed[i])
+                        for (int i = start; i < end; i++)
                         {
-                            colors[i] = span.ForeColor;
-                            styles[i] = span.Style;
-                            claimed[i] = true;
+                            colors[i] = _ruleset.DefaultForeColor;
+                            styles[i] = FontStyle.Regular;
+                            claimed[i] = false;
+                        }
+                    }
+                    else
+                    {
+                        for (int i = start; i < end; i++)
+                        {
+                            if (!claimed[i])
+                            {
+                                colors[i] = span.ForeColor;
+                                styles[i] = span.Style;
+                                claimed[i] = true;
+                            }
                         }
                     }
                 }

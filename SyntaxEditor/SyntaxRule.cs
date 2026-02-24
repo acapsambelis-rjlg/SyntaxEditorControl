@@ -11,8 +11,10 @@ namespace CodeEditor
         public string Pattern { get; set; }
         public Color ForeColor { get; set; }
         public FontStyle FontStyle { get; set; }
+        public string ExcludePattern { get; set; }
 
         private Regex _compiledRegex;
+        private Regex _compiledExclude;
 
         public SyntaxRule(string name, string pattern, Color foreColor, FontStyle fontStyle = FontStyle.Regular)
         {
@@ -29,6 +31,17 @@ namespace CodeEditor
                 if (_compiledRegex == null)
                     _compiledRegex = new Regex(Pattern, RegexOptions.Compiled | RegexOptions.Multiline);
                 return _compiledRegex;
+            }
+        }
+
+        public Regex CompiledExclude
+        {
+            get
+            {
+                if (ExcludePattern == null) return null;
+                if (_compiledExclude == null)
+                    _compiledExclude = new Regex(ExcludePattern, RegexOptions.Compiled | RegexOptions.Multiline);
+                return _compiledExclude;
             }
         }
     }
@@ -67,6 +80,13 @@ namespace CodeEditor
             Rules.Add(new SyntaxRule(name, pattern, foreColor, fontStyle));
         }
 
+        public void AddRule(string name, string pattern, Color foreColor, FontStyle fontStyle, string excludePattern)
+        {
+            var rule = new SyntaxRule(name, pattern, foreColor, fontStyle);
+            rule.ExcludePattern = excludePattern;
+            Rules.Add(rule);
+        }
+
         public static SyntaxRuleset CreateCSharpRuleset()
         {
             var rs = new SyntaxRuleset("C#");
@@ -90,6 +110,7 @@ namespace CodeEditor
             var rs = new SyntaxRuleset("Python");
             rs.AddRule("Comment", @"#.*$", Color.FromArgb(0, 128, 0), FontStyle.Italic);
             rs.AddRule("DocString", "\"\"\"[\\s\\S]*?\"\"\"|'''[\\s\\S]*?'''", Color.FromArgb(163, 21, 21), FontStyle.Italic);
+            rs.AddRule("FString", "[fF]\"(?:[^\"\\\\]|\\\\.)*\"|[fF]'(?:[^'\\\\]|\\\\.)*'", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\{[^}]*\}");
             rs.AddRule("String", "\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", Color.FromArgb(163, 21, 21));
             rs.AddRule("Keyword",
                 @"\b(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b",
