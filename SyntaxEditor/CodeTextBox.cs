@@ -1117,6 +1117,20 @@ namespace CodeEditor
             string s = c.ToString();
             string closing = null;
 
+            if (c == ')' || c == ']' || c == '}' || c == '"' || c == '\'')
+            {
+                string line = _doc.GetLine(_caret.Line);
+                if (_caret.Column < line.Length && line[_caret.Column] == c)
+                {
+                    _caret = new TextPosition(_caret.Line, _caret.Column + 1);
+                    ClearSelection();
+                    _desiredColumn = -1;
+                    EnsureCaretVisible();
+                    ResetCaretBlink();
+                    return;
+                }
+            }
+
             if (c == '(' ) closing = ")";
             else if (c == '[') closing = "]";
             else if (c == '{') closing = "}";
