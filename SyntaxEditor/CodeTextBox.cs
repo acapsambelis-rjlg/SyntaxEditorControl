@@ -530,33 +530,38 @@ namespace CodeEditor
 
             if (_multiLineSpans != null && _multiLineSpans.ContainsKey(lineIndex))
             {
-                foreach (var span in _multiLineSpans[lineIndex])
+                var spans = _multiLineSpans[lineIndex];
+
+                foreach (var span in spans)
                 {
+                    if (span.IsExclude) continue;
                     int start = (lineIndex == span.StartLine) ? span.StartCol : 0;
                     int end = (lineIndex == span.EndLine) ? span.EndCol : line.Length;
                     end = Math.Min(end, line.Length);
                     start = Math.Max(0, start);
-
-                    if (span.IsExclude)
+                    for (int i = start; i < end; i++)
                     {
-                        for (int i = start; i < end; i++)
+                        if (!claimed[i])
                         {
-                            colors[i] = _ruleset.DefaultForeColor;
-                            styles[i] = FontStyle.Regular;
-                            claimed[i] = false;
+                            colors[i] = span.ForeColor;
+                            styles[i] = span.Style;
+                            claimed[i] = true;
                         }
                     }
-                    else
+                }
+
+                foreach (var span in spans)
+                {
+                    if (!span.IsExclude) continue;
+                    int start = (lineIndex == span.StartLine) ? span.StartCol : 0;
+                    int end = (lineIndex == span.EndLine) ? span.EndCol : line.Length;
+                    end = Math.Min(end, line.Length);
+                    start = Math.Max(0, start);
+                    for (int i = start; i < end; i++)
                     {
-                        for (int i = start; i < end; i++)
-                        {
-                            if (!claimed[i])
-                            {
-                                colors[i] = span.ForeColor;
-                                styles[i] = span.Style;
-                                claimed[i] = true;
-                            }
-                        }
+                        colors[i] = _ruleset.DefaultForeColor;
+                        styles[i] = FontStyle.Regular;
+                        claimed[i] = false;
                     }
                 }
             }
