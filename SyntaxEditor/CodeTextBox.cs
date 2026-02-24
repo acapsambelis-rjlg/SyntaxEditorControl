@@ -625,14 +625,21 @@ namespace CodeEditor
                     int actualLine = VisibleToActualLine(vi);
                     float y = (vi - _scrollY) * _lineHeight;
                     string line = _doc.GetLine(actualLine);
-                    bool isEmpty = line.TrimStart().Length == 0;
+                    string trimmed = line.TrimStart();
+                    bool isEmpty = trimmed.Length == 0;
 
-                    if (!isEmpty) continue;
-
-                    int nextIndent = GetNextNonEmptyLineIndent(actualLine);
-                    int prevIndent = GetPrevNonEmptyLineIndent(actualLine);
-                    int guideIndent = Math.Min(nextIndent, prevIndent);
-                    int guideLevels = guideIndent / _tabSize;
+                    int guideLevels;
+                    if (isEmpty)
+                    {
+                        int nextIndent = GetNextNonEmptyLineIndent(actualLine);
+                        int prevIndent = GetPrevNonEmptyLineIndent(actualLine);
+                        guideLevels = Math.Min(nextIndent, prevIndent) / _tabSize;
+                    }
+                    else
+                    {
+                        int lineIndent = line.Length - trimmed.Length;
+                        guideLevels = lineIndent / _tabSize;
+                    }
 
                     for (int level = 1; level <= guideLevels; level++)
                     {
