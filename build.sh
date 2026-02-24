@@ -7,7 +7,6 @@ mcs -target:winexe -out:CodeEditor.exe \
     SyntaxEditor/TextDocument.cs \
     SyntaxEditor/CodeTextBox.Designer.cs \
     SyntaxEditor/CodeTextBox.cs \
-    SyntaxEditor/DarkMenuRenderer.cs \
     SyntaxEditor/TestForm.Designer.cs \
     SyntaxEditor/TestForm.cs \
     SyntaxEditor/Program.cs \

@@ -755,6 +755,15 @@ namespace CodeEditor
                 return;
             }
 
+            if ((ModifierKeys & Keys.Shift) != 0)
+            {
+                int hDelta = -(e.Delta / 120) * (int)(_charWidth * 3);
+                _scrollX = Math.Max(0, _scrollX + hDelta);
+                UpdateScrollBars();
+                Invalidate();
+                return;
+            }
+
             int delta = -(e.Delta / 120) * 3;
             _scrollY = Math.Max(0, Math.Min(_scrollY + delta, Math.Max(0, _doc.LineCount - 1)));
             UpdateScrollBars();
