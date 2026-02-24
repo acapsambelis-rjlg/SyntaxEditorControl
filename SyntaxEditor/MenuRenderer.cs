@@ -3,7 +3,7 @@ using System.Windows.Forms;
 
 namespace CodeEditor
 {
-    internal class LightMenuRenderer : ToolStripProfessionalRenderer
+    internal class MenuRenderer : ToolStripProfessionalRenderer
     {
         protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
         {

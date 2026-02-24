@@ -77,7 +77,7 @@ namespace CodeEditor
             //
             this._menuStrip.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
             this._menuStrip.ForeColor = System.Drawing.Color.FromArgb(30, 30, 30);
-            this._menuStrip.Renderer = new LightMenuRenderer();
+            this._menuStrip.Renderer = new MenuRenderer();
             this._menuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
                 this._fileMenu,
                 this._editMenu,
