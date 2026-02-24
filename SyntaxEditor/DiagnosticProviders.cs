@@ -31,6 +31,8 @@ namespace CodeEditor
                 CheckUnusedVariable(lines, i, line, text, diagnostics);
                 CheckConsoleWriteLineArgs(lines, i, line, diagnostics);
                 CheckComparisonInsteadOfAssignment(lines, i, line, trimmed, diagnostics);
+                CheckThisQualifier(lines, i, line, diagnostics);
+                CheckStringTypeName(lines, i, line, trimmed, diagnostics);
             }
 
             return diagnostics;
@@ -114,6 +116,38 @@ namespace CodeEditor
                 int col = line.IndexOf("if");
                 diagnostics.Add(new Diagnostic(i, col, match.Length,
                     "Possible accidental assignment in condition; did you mean '=='?", DiagnosticSeverity.Warning));
+            }
+        }
+
+        private void CheckThisQualifier(string[] lines, int i, string line, List<Diagnostic> diagnostics)
+        {
+            var match = Regex.Match(line, @"\bthis\.(\w+)");
+            if (match.Success)
+            {
+                diagnostics.Add(new Diagnostic(i, match.Index, 5,
+                    "'this.' qualifier is unnecessary", DiagnosticSeverity.Hint));
+            }
+        }
+
+        private void CheckStringTypeName(string[] lines, int i, string line, string trimmed, List<Diagnostic> diagnostics)
+        {
+            var match = Regex.Match(line, @"\bString\b");
+            if (match.Success && !trimmed.StartsWith("//") && !trimmed.StartsWith("using"))
+            {
+                diagnostics.Add(new Diagnostic(i, match.Index, 6,
+                    "Use keyword 'string' instead of 'String'", DiagnosticSeverity.Hint));
+            }
+            match = Regex.Match(line, @"\bInt32\b");
+            if (match.Success && !trimmed.StartsWith("//"))
+            {
+                diagnostics.Add(new Diagnostic(i, match.Index, 5,
+                    "Use keyword 'int' instead of 'Int32'", DiagnosticSeverity.Hint));
+            }
+            match = Regex.Match(line, @"\bBoolean\b");
+            if (match.Success && !trimmed.StartsWith("//"))
+            {
+                diagnostics.Add(new Diagnostic(i, match.Index, 7,
+                    "Use keyword 'bool' instead of 'Boolean'", DiagnosticSeverity.Hint));
             }
         }
 
@@ -226,6 +260,8 @@ namespace CodeEditor
                 CheckBareExcept(lines, i, trimmed, diagnostics);
                 CheckTabMixing(lines, i, line, diagnostics);
                 CheckComparisonToNone(lines, i, line, diagnostics);
+                CheckBoolComparison(lines, i, line, diagnostics);
+                CheckTypeComparison(lines, i, line, diagnostics);
             }
 
             return diagnostics;
@@ -316,6 +352,32 @@ namespace CodeEditor
             {
                 diagnostics.Add(new Diagnostic(i, match.Index, match.Length,
                     "Use 'is not None' instead of '!= None'", DiagnosticSeverity.Info));
+            }
+        }
+
+        private void CheckBoolComparison(string[] lines, int i, string line, List<Diagnostic> diagnostics)
+        {
+            var match = Regex.Match(line, @"==\s*True\b");
+            if (match.Success)
+            {
+                diagnostics.Add(new Diagnostic(i, match.Index, match.Length,
+                    "Comparison to True; simplify to just the expression", DiagnosticSeverity.Hint));
+            }
+            match = Regex.Match(line, @"==\s*False\b");
+            if (match.Success)
+            {
+                diagnostics.Add(new Diagnostic(i, match.Index, match.Length,
+                    "Comparison to False; use 'not' instead", DiagnosticSeverity.Hint));
+            }
+        }
+
+        private void CheckTypeComparison(string[] lines, int i, string line, List<Diagnostic> diagnostics)
+        {
+            var match = Regex.Match(line, @"type\((\w+)\)\s*==");
+            if (match.Success)
+            {
+                diagnostics.Add(new Diagnostic(i, match.Index, match.Length,
+                    "Use 'isinstance()' instead of comparing type()", DiagnosticSeverity.Hint));
             }
         }
 
@@ -442,6 +504,8 @@ namespace CodeEditor
                 CheckSemicolonMissing(lines, i, line, trimmed, diagnostics);
                 CheckConsoleLog(lines, i, line, diagnostics);
                 CheckUndefinedComparison(lines, i, line, diagnostics);
+                CheckUndefinedInit(lines, i, line, diagnostics);
+                CheckArrowFunction(lines, i, line, trimmed, diagnostics);
             }
 
             return diagnostics;
@@ -524,6 +588,30 @@ namespace CodeEditor
                     diagnostics.Add(new Diagnostic(i, match.Index, match.Length,
                         "Consider using 'typeof x === \"undefined\"' for safer undefined checks", DiagnosticSeverity.Info));
                 }
+            }
+        }
+
+        private void CheckUndefinedInit(string[] lines, int i, string line, List<Diagnostic> diagnostics)
+        {
+            var match = Regex.Match(line, @"\b(?:let|const|var)\s+(\w+)\s*=\s*undefined\s*;");
+            if (match.Success)
+            {
+                int eqIdx = line.IndexOf("= undefined", match.Index);
+                if (eqIdx >= 0)
+                {
+                    diagnostics.Add(new Diagnostic(i, eqIdx, 12,
+                        "Unnecessary initialization to undefined; 'let' variables are undefined by default", DiagnosticSeverity.Hint));
+                }
+            }
+        }
+
+        private void CheckArrowFunction(string[] lines, int i, string line, string trimmed, List<Diagnostic> diagnostics)
+        {
+            var match = Regex.Match(line, @"\bfunction\s*\(");
+            if (match.Success && !trimmed.StartsWith("function ") && !trimmed.StartsWith("export function") && !trimmed.StartsWith("async function"))
+            {
+                diagnostics.Add(new Diagnostic(i, match.Index, 8,
+                    "Consider using an arrow function instead", DiagnosticSeverity.Hint));
             }
         }
 

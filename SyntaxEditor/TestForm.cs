@@ -231,6 +231,7 @@ namespace SampleApp
             if (id <= 0)
                 throw new ArgumentException(""ID must be positive"");
 
+            String label = String.Format(""Item {0}"", id);
             double result = Math.Sqrt(id) * 3.14159;
             bool isValid = result > 0 && value != null;
 
@@ -311,7 +312,10 @@ def main():
 
     for user in users:
         print(user.greet())
-        status = ""adult"" if user.is_adult else ""minor""
+        if user.is_adult == True:
+            status = ""adult""
+        else:
+            status = ""minor""
         print(f""  Status: {status}"")
 
     # Lambda and comprehension
@@ -405,6 +409,7 @@ const processUsers = (users) => {
 
 // Async main with top-level await pattern
 const main = async () => {
+    let result = undefined;
     const service = new DataService(API_BASE);
 
     service.on('error', ({ endpoint, error }) => {
