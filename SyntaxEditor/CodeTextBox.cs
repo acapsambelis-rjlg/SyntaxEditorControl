@@ -502,6 +502,7 @@ namespace CodeEditor
             PaintFindHighlights(g, firstVisIdx, lastVisIdx);
             PaintBracketMatching(g);
             PaintExtraCursors(g);
+            PaintIndentGuides(g, firstVisIdx, lastVisIdx);
 
             for (int vi = firstVisIdx; vi <= lastVisIdx; vi++)
             {
@@ -609,6 +610,70 @@ namespace CodeEditor
                     g.DrawString(segment, f, brush, x, y, StringFormat.GenericTypographic);
                 if (run.Style != FontStyle.Regular) f.Dispose();
             }
+        }
+
+        private void PaintIndentGuides(Graphics g, int firstVisIdx, int lastVisIdx)
+        {
+            if (_tabSize <= 0) return;
+
+            float guideSpacing = _tabSize * _charWidth;
+            using (var pen = new Pen(_ruleset.IndentGuideColor, 1f))
+            {
+                pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dot;
+                for (int vi = firstVisIdx; vi <= lastVisIdx; vi++)
+                {
+                    int actualLine = VisibleToActualLine(vi);
+                    float y = (vi - _scrollY) * _lineHeight;
+                    string line = _doc.GetLine(actualLine);
+
+                    int lineIndent = 0;
+                    for (int i = 0; i < line.Length; i++)
+                    {
+                        if (line[i] == ' ') lineIndent++;
+                        else if (line[i] == '\t') lineIndent += _tabSize;
+                        else break;
+                    }
+
+                    int contentIndentLevel = lineIndent / _tabSize;
+                    if (line.TrimStart().Length == 0)
+                    {
+                        int nextIndent = GetNextNonEmptyLineIndent(actualLine);
+                        int prevIndent = GetPrevNonEmptyLineIndent(actualLine);
+                        contentIndentLevel = Math.Max(nextIndent, prevIndent) / _tabSize;
+                    }
+
+                    for (int level = 1; level <= contentIndentLevel; level++)
+                    {
+                        float x = _gutterWidth + TextLeftPadding + level * guideSpacing - _scrollX;
+                        if (x > _gutterWidth && x < ClientSize.Width - _vScrollBar.Width)
+                            g.DrawLine(pen, x, y, x, y + _lineHeight);
+                    }
+                }
+            }
+        }
+
+        private int GetNextNonEmptyLineIndent(int fromLine)
+        {
+            for (int i = fromLine + 1; i < _doc.LineCount; i++)
+            {
+                string line = _doc.GetLine(i);
+                string trimmed = line.TrimStart();
+                if (trimmed.Length > 0)
+                    return line.Length - trimmed.Length;
+            }
+            return 0;
+        }
+
+        private int GetPrevNonEmptyLineIndent(int fromLine)
+        {
+            for (int i = fromLine - 1; i >= 0; i--)
+            {
+                string line = _doc.GetLine(i);
+                string trimmed = line.TrimStart();
+                if (trimmed.Length > 0)
+                    return line.Length - trimmed.Length;
+            }
+            return 0;
         }
 
         #endregion
@@ -1081,6 +1146,9 @@ namespace CodeEditor
                 case Keys.OemCloseBrackets:
                     if (ctrl) { IndentSelection(true); e.Handled = true; }
                     break;
+                case Keys.Oem2:
+                    if (ctrl) { ToggleLineComment(); e.Handled = true; e.SuppressKeyPress = true; }
+                    break;
             }
 
             UpdateBracketMatching();
@@ -1352,6 +1420,82 @@ namespace CodeEditor
             _selectionAnchor = new TextPosition(startLine, Math.Max(0, range.Start.Column + adjustStart));
             _caret = new TextPosition(endLine, Math.Max(0, _doc.GetLineLength(endLine)));
             _hasSelection = true;
+            EnsureCaretVisible();
+            ResetCaretBlink();
+            Invalidate();
+        }
+
+        private void ToggleLineComment()
+        {
+            string token = _ruleset?.LineCommentToken;
+            if (string.IsNullOrEmpty(token)) return;
+
+            int startLine, endLine;
+            if (_hasSelection)
+            {
+                var range = GetSelectionRange();
+                startLine = range.Start.Line;
+                endLine = range.End.Line;
+                if (range.End.Column == 0 && endLine > startLine) endLine--;
+            }
+            else
+            {
+                startLine = _caret.Line;
+                endLine = _caret.Line;
+            }
+
+            bool allCommented = true;
+            for (int i = startLine; i <= endLine; i++)
+            {
+                string trimmed = _doc.GetLine(i).TrimStart();
+                if (trimmed.Length > 0 && !trimmed.StartsWith(token))
+                {
+                    allCommented = false;
+                    break;
+                }
+            }
+
+            _doc.BeginComposite(_caret);
+
+            int caretColDelta = 0;
+            for (int i = startLine; i <= endLine; i++)
+            {
+                string line = _doc.GetLine(i);
+                if (allCommented)
+                {
+                    int idx = line.IndexOf(token);
+                    if (idx >= 0)
+                    {
+                        int removeLen = token.Length;
+                        if (idx + removeLen < line.Length && line[idx + removeLen] == ' ')
+                            removeLen++;
+                        var from = new TextPosition(i, idx);
+                        var to = new TextPosition(i, idx + removeLen);
+                        _doc.Delete(from, to);
+                        if (i == _caret.Line) caretColDelta -= removeLen;
+                    }
+                }
+                else
+                {
+                    if (line.TrimStart().Length == 0 && line.Length == 0) continue;
+                    int indent = 0;
+                    while (indent < line.Length && (line[indent] == ' ' || line[indent] == '\t')) indent++;
+                    string insert = token + " ";
+                    _doc.Insert(new TextPosition(i, indent), insert);
+                    if (i == _caret.Line) caretColDelta += insert.Length;
+                }
+            }
+
+            _doc.EndComposite(new TextPosition(_caret.Line, Math.Max(0, _caret.Column + caretColDelta)));
+            _caret = new TextPosition(_caret.Line, Math.Max(0, _caret.Column + caretColDelta));
+
+            if (_hasSelection)
+            {
+                _selectionAnchor = new TextPosition(startLine, 0);
+                _caret = new TextPosition(endLine, _doc.GetLineLength(endLine));
+                _hasSelection = true;
+            }
+
             EnsureCaretVisible();
             ResetCaretBlink();
             Invalidate();

@@ -46,12 +46,14 @@ build.sh                               - Mono build script (for Replit environme
 - Undo/Redo with composite actions
 - Line duplication (Ctrl+D), line deletion (Ctrl+Shift+L)
 - Selection via mouse and keyboard, click-and-drag text with drop cursor preview
-- Auto-indent, smart Home key, bracket auto-close
+- Auto-indent, smart Home key, bracket auto-close with skip-over closing characters
 - Block indent/outdent (Tab/Shift+Tab on selection)
+- Line/block commenting toggle (Ctrl+/) using LineCommentToken from SyntaxRuleset
 - Case transform (Ctrl+U / Ctrl+Shift+U)
 - Ctrl+scroll wheel zoom (6pt–48pt), Shift+scroll horizontal scrolling
 - Go To Line dialog
 - Line numbers, current line highlight, scrollbars (gutter clips text area)
+- Indent guides (faint dotted vertical lines at each indentation level)
 - Built-in rulesets: C#, Python, JavaScript, Plain Text
 - **Find & Replace** panel (Ctrl+F / Ctrl+H) with match highlighting
 - **Autocomplete** popup with ICompletionProvider (Ctrl+Space, auto-trigger on typing)
@@ -140,6 +142,7 @@ build.sh                               - Mono build script (for Replit environme
 - Ctrl+Click: Add cursor
 - Tab/Shift+Tab: Indent/Outdent (or accept completion)
 - Ctrl+[/]: Indent/Outdent selection
+- Ctrl+/: Toggle line/block comment
 - Home: Smart home (first non-whitespace / column 0)
 - Ctrl+Home/End: Document start/end
 - Ctrl+Scroll: Zoom in/out

@@ -59,6 +59,8 @@ namespace CodeEditor
         public Color CaretColor { get; set; }
         public Color GutterSeparatorColor { get; set; }
         public Color ActiveLineNumberColor { get; set; }
+        public string LineCommentToken { get; set; }
+        public Color IndentGuideColor { get; set; }
 
         public SyntaxRuleset(string languageName)
         {
@@ -73,6 +75,8 @@ namespace CodeEditor
             CaretColor = Color.Black;
             GutterSeparatorColor = Color.FromArgb(218, 218, 218);
             ActiveLineNumberColor = Color.FromArgb(50, 50, 50);
+            LineCommentToken = null;
+            IndentGuideColor = Color.FromArgb(220, 220, 220);
         }
 
         public void AddRule(string name, string pattern, Color foreColor, FontStyle fontStyle = FontStyle.Regular)
@@ -90,6 +94,7 @@ namespace CodeEditor
         public static SyntaxRuleset CreateCSharpRuleset()
         {
             var rs = new SyntaxRuleset("C#");
+            rs.LineCommentToken = "//";
             rs.AddRule("Comment", @"//.*$|/\*[\s\S]*?\*/", Color.FromArgb(0, 128, 0), FontStyle.Italic);
             rs.AddRule("InterpolatedString", "\\$\"(?:[^\"\\\\]|\\\\.)*\"", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\{[^}]*\}");
             rs.AddRule("String", "\"(?:[^\"\\\\]|\\\\.)*\"|@\"(?:\"\"|[^\"])*\"", Color.FromArgb(163, 21, 21));
@@ -109,6 +114,7 @@ namespace CodeEditor
         public static SyntaxRuleset CreatePythonRuleset()
         {
             var rs = new SyntaxRuleset("Python");
+            rs.LineCommentToken = "#";
             rs.AddRule("Comment", @"#.*$", Color.FromArgb(0, 128, 0), FontStyle.Italic);
             rs.AddRule("DocString", "\"\"\"[\\s\\S]*?\"\"\"|'''[\\s\\S]*?'''", Color.FromArgb(163, 21, 21), FontStyle.Italic);
             rs.AddRule("FString", "[fF]\"(?:[^\"\\\\]|\\\\.)*\"|[fF]'(?:[^'\\\\]|\\\\.)*'", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\{[^}]*\}");
@@ -128,6 +134,7 @@ namespace CodeEditor
         public static SyntaxRuleset CreateJavaScriptRuleset()
         {
             var rs = new SyntaxRuleset("JavaScript");
+            rs.LineCommentToken = "//";
             rs.AddRule("Comment", @"//.*$|/\*[\s\S]*?\*/", Color.FromArgb(0, 128, 0), FontStyle.Italic);
             rs.AddRule("TemplateString", @"`(?:[^`\\]|\\.|\$\{[^}]*\})*`", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\$\{[^}]*\}");
             rs.AddRule("String", "\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", Color.FromArgb(163, 21, 21));
