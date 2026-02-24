@@ -1,0 +1,472 @@
+using System;
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace CodeEditor
+{
+    public class TestForm : Form
+    {
+        private CodeTextBox _codeTextBox;
+        private ComboBox _languageSelector;
+        private Label _statusLabel;
+        private MenuStrip _menuStrip;
+
+        public TestForm()
+        {
+            Text = "Code Editor - Test Form";
+            Size = new Size(1100, 750);
+            StartPosition = FormStartPosition.CenterScreen;
+            BackColor = Color.FromArgb(45, 45, 45);
+            ForeColor = Color.White;
+
+            SetupMenu();
+            SetupToolbar();
+            SetupEditor();
+            SetupStatusBar();
+
+            _codeTextBox.Text = GetSampleCSharpCode();
+            _languageSelector.SelectedIndex = 0;
+        }
+
+        private void SetupMenu()
+        {
+            _menuStrip = new MenuStrip();
+            _menuStrip.BackColor = Color.FromArgb(45, 45, 45);
+            _menuStrip.ForeColor = Color.White;
+            _menuStrip.Renderer = new DarkMenuRenderer();
+
+            var fileMenu = new ToolStripMenuItem("File");
+            fileMenu.DropDownItems.Add("New", null, (s, e) => { _codeTextBox.Text = ""; });
+            fileMenu.DropDownItems.Add(new ToolStripSeparator());
+            fileMenu.DropDownItems.Add("Exit", null, (s, e) => Close());
+
+            var editMenu = new ToolStripMenuItem("Edit");
+            editMenu.DropDownItems.Add("Undo (Ctrl+Z)", null, (s, e) => _codeTextBox.PerformUndo());
+            editMenu.DropDownItems.Add("Redo (Ctrl+Y)", null, (s, e) => _codeTextBox.PerformRedo());
+            editMenu.DropDownItems.Add(new ToolStripSeparator());
+            editMenu.DropDownItems.Add("Cut (Ctrl+X)", null, (s, e) => _codeTextBox.Cut());
+            editMenu.DropDownItems.Add("Copy (Ctrl+C)", null, (s, e) => _codeTextBox.Copy());
+            editMenu.DropDownItems.Add("Paste (Ctrl+V)", null, (s, e) => _codeTextBox.Paste());
+            editMenu.DropDownItems.Add(new ToolStripSeparator());
+            editMenu.DropDownItems.Add("Select All (Ctrl+A)", null, (s, e) => _codeTextBox.SelectAll());
+            editMenu.DropDownItems.Add("Duplicate Line (Ctrl+D)", null, (s, e) => _codeTextBox.DuplicateLine());
+            editMenu.DropDownItems.Add("Delete Line (Ctrl+Shift+L)", null, (s, e) => _codeTextBox.DeleteLine());
+
+            var viewMenu = new ToolStripMenuItem("View");
+            var lineNumbers = new ToolStripMenuItem("Line Numbers") { Checked = true, CheckOnClick = true };
+            lineNumbers.Click += (s, e) => _codeTextBox.ShowLineNumbers = lineNumbers.Checked;
+            viewMenu.DropDownItems.Add(lineNumbers);
+            var currentLine = new ToolStripMenuItem("Highlight Current Line") { Checked = true, CheckOnClick = true };
+            currentLine.Click += (s, e) => _codeTextBox.HighlightCurrentLine = currentLine.Checked;
+            viewMenu.DropDownItems.Add(currentLine);
+            viewMenu.DropDownItems.Add(new ToolStripSeparator());
+            viewMenu.DropDownItems.Add("Go To Line...", null, (s, e) => ShowGoToLineDialog());
+
+            _menuStrip.Items.AddRange(new ToolStripItem[] { fileMenu, editMenu, viewMenu });
+            MainMenuStrip = _menuStrip;
+            Controls.Add(_menuStrip);
+        }
+
+        private void SetupToolbar()
+        {
+            var toolbar = new Panel();
+            toolbar.Dock = DockStyle.Top;
+            toolbar.Height = 36;
+            toolbar.BackColor = Color.FromArgb(37, 37, 38);
+            toolbar.Padding = new Padding(5, 4, 5, 4);
+
+            var label = new Label();
+            label.Text = "Language:";
+            label.ForeColor = Color.FromArgb(200, 200, 200);
+            label.AutoSize = true;
+            label.Location = new Point(8, 9);
+            toolbar.Controls.Add(label);
+
+            _languageSelector = new ComboBox();
+            _languageSelector.DropDownStyle = ComboBoxStyle.DropDownList;
+            _languageSelector.Location = new Point(80, 5);
+            _languageSelector.Width = 160;
+            _languageSelector.BackColor = Color.FromArgb(60, 60, 60);
+            _languageSelector.ForeColor = Color.White;
+            _languageSelector.FlatStyle = FlatStyle.Flat;
+            _languageSelector.Items.AddRange(new object[] { "C#", "Python", "JavaScript", "Plain Text" });
+            _languageSelector.SelectedIndexChanged += LanguageChanged;
+            toolbar.Controls.Add(_languageSelector);
+
+            var helpLabel = new Label();
+            helpLabel.Text = "Shortcuts: Ctrl+D Duplicate | Ctrl+Shift+L Delete Line | Ctrl+Z/Y Undo/Redo | Tab/Shift+Tab Indent | Ctrl+U Case";
+            helpLabel.ForeColor = Color.FromArgb(140, 140, 140);
+            helpLabel.AutoSize = true;
+            helpLabel.Location = new Point(260, 9);
+            toolbar.Controls.Add(helpLabel);
+
+            Controls.Add(toolbar);
+        }
+
+        private void SetupEditor()
+        {
+            _codeTextBox = new CodeTextBox();
+            _codeTextBox.Dock = DockStyle.Fill;
+            _codeTextBox.Ruleset = SyntaxRuleset.CreateCSharpRuleset();
+            _codeTextBox.TabSize = 4;
+            _codeTextBox.TextChanged += (s, e) => UpdateStatus();
+            Controls.Add(_codeTextBox);
+            _codeTextBox.BringToFront();
+        }
+
+        private void SetupStatusBar()
+        {
+            _statusLabel = new Label();
+            _statusLabel.Dock = DockStyle.Bottom;
+            _statusLabel.Height = 24;
+            _statusLabel.BackColor = Color.FromArgb(0, 122, 204);
+            _statusLabel.ForeColor = Color.White;
+            _statusLabel.TextAlign = ContentAlignment.MiddleLeft;
+            _statusLabel.Padding = new Padding(8, 0, 0, 0);
+            _statusLabel.Text = "Ready";
+            Controls.Add(_statusLabel);
+        }
+
+        private void UpdateStatus()
+        {
+            var pos = _codeTextBox.CaretPosition;
+            _statusLabel.Text = $"Ln {pos.Line + 1}, Col {pos.Column + 1}  |  Lines: {_codeTextBox.LineCount}  |  {_codeTextBox.Ruleset.LanguageName}";
+        }
+
+        private void LanguageChanged(object sender, EventArgs e)
+        {
+            switch (_languageSelector.SelectedIndex)
+            {
+                case 0:
+                    _codeTextBox.Ruleset = SyntaxRuleset.CreateCSharpRuleset();
+                    _codeTextBox.Text = GetSampleCSharpCode();
+                    break;
+                case 1:
+                    _codeTextBox.Ruleset = SyntaxRuleset.CreatePythonRuleset();
+                    _codeTextBox.Text = GetSamplePythonCode();
+                    break;
+                case 2:
+                    _codeTextBox.Ruleset = SyntaxRuleset.CreateJavaScriptRuleset();
+                    _codeTextBox.Text = GetSampleJavaScriptCode();
+                    break;
+                case 3:
+                    _codeTextBox.Ruleset = SyntaxRuleset.CreatePlainTextRuleset();
+                    _codeTextBox.Text = "Hello, World!\n\nThis is plain text mode with no syntax highlighting.\nYou can still use all the editing features:\n- Undo/Redo\n- Line duplication\n- Selection and drag\n- Auto-indent\n- And more!";
+                    break;
+            }
+            UpdateStatus();
+        }
+
+        private void ShowGoToLineDialog()
+        {
+            using (var dialog = new Form())
+            {
+                dialog.Text = "Go To Line";
+                dialog.Size = new Size(300, 140);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.BackColor = Color.FromArgb(45, 45, 45);
+                dialog.ForeColor = Color.White;
+
+                var label = new Label { Text = $"Line number (1 - {_codeTextBox.LineCount}):", Location = new Point(12, 15), AutoSize = true };
+                var textBox = new TextBox { Location = new Point(12, 40), Width = 260, BackColor = Color.FromArgb(60, 60, 60), ForeColor = Color.White };
+                var okButton = new Button { Text = "Go", DialogResult = DialogResult.OK, Location = new Point(116, 70), Width = 75, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(0, 122, 204), ForeColor = Color.White };
+                var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(197, 70), Width = 75, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(60, 60, 60), ForeColor = Color.White };
+
+                dialog.Controls.AddRange(new Control[] { label, textBox, okButton, cancelButton });
+                dialog.AcceptButton = okButton;
+                dialog.CancelButton = cancelButton;
+
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    int line;
+                    if (int.TryParse(textBox.Text, out line))
+                        _codeTextBox.GoToLine(line);
+                }
+            }
+        }
+
+        private string GetSampleCSharpCode()
+        {
+            return @"using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace SampleApp
+{
+    /// <summary>
+    /// Demonstrates syntax highlighting for C#
+    /// </summary>
+    public class Program
+    {
+        private static readonly string AppName = ""Demo Application"";
+        private const int MaxRetries = 3;
+
+        public static void Main(string[] args)
+        {
+            Console.WriteLine($""Welcome to {AppName}"");
+
+            var numbers = new List<int> { 1, 2, 3, 4, 5 };
+            var evenNumbers = numbers.Where(n => n % 2 == 0).ToList();
+
+            foreach (var num in evenNumbers)
+            {
+                Console.WriteLine($""Even: {num}"");
+            }
+
+            // Process data with error handling
+            try
+            {
+                ProcessData(42, ""hello world"");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($""Error: {ex.Message}"");
+            }
+        }
+
+        public static async Task<bool> ProcessData(int id, string value)
+        {
+            if (id <= 0)
+                throw new ArgumentException(""ID must be positive"");
+
+            double result = Math.Sqrt(id) * 3.14159;
+            bool isValid = result > 0 && value != null;
+
+            /* Multi-line comment:
+               This demonstrates various C# features
+               including async/await and LINQ */
+            await Task.Delay(100);
+
+            return isValid;
+        }
+    }
+}";
+        }
+
+        private string GetSamplePythonCode()
+        {
+            return @"#!/usr/bin/env python3
+""""""
+Sample Python module demonstrating syntax highlighting.
+This module shows various Python language features.
+""""""
+
+import os
+import sys
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+
+# Constants
+MAX_RETRIES = 3
+DEFAULT_TIMEOUT = 30.0
+API_URL = ""https://api.example.com/v1""
+
+@dataclass
+class User:
+    name: str
+    age: int
+    email: Optional[str] = None
+
+    def greet(self) -> str:
+        return f""Hello, my name is {self.name}""
+
+    @property
+    def is_adult(self) -> bool:
+        return self.age >= 18
+
+class DataProcessor:
+    """"""Processes and transforms data.""""""
+
+    def __init__(self, source: str):
+        self.source = source
+        self._cache: Dict[str, any] = {}
+
+    async def fetch_data(self, query: str) -> List[dict]:
+        results = []
+        for i in range(MAX_RETRIES):
+            try:
+                data = await self._make_request(query)
+                results.extend(data)
+                break
+            except Exception as e:
+                print(f""Retry {i + 1}/{MAX_RETRIES}: {e}"")
+
+        return results
+
+    def process(self, items: List[dict]) -> List[dict]:
+        # Filter and transform
+        return [
+            {**item, 'processed': True}
+            for item in items
+            if item.get('valid', False)
+        ]
+
+def main():
+    users = [
+        User(""Alice"", 30, ""alice@example.com""),
+        User(""Bob"", 17),
+    ]
+
+    for user in users:
+        print(user.greet())
+        status = ""adult"" if user.is_adult else ""minor""
+        print(f""  Status: {status}"")
+
+    # Lambda and comprehension
+    numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    squares = list(map(lambda x: x ** 2, filter(lambda x: x % 2 == 0, numbers)))
+    print(f""Even squares: {squares}"")
+
+if __name__ == ""__main__"":
+    main()";
+        }
+
+        private string GetSampleJavaScriptCode()
+        {
+            return @"// Modern JavaScript / ES2023 Example
+'use strict';
+
+import { readFile, writeFile } from 'fs/promises';
+import path from 'path';
+
+const API_BASE = 'https://api.example.com';
+const MAX_RETRIES = 3;
+const TIMEOUT_MS = 5000;
+
+class EventEmitter {
+    #listeners = new Map();
+
+    on(event, callback) {
+        if (!this.#listeners.has(event)) {
+            this.#listeners.set(event, []);
+        }
+        this.#listeners.get(event).push(callback);
+        return this;
+    }
+
+    emit(event, ...args) {
+        const handlers = this.#listeners.get(event) ?? [];
+        handlers.forEach(handler => handler(...args));
+    }
+}
+
+class DataService extends EventEmitter {
+    constructor(baseUrl) {
+        super();
+        this.baseUrl = baseUrl;
+        this.cache = new Map();
+    }
+
+    async fetchData(endpoint, options = {}) {
+        const url = `${this.baseUrl}/${endpoint}`;
+        const cacheKey = JSON.stringify({ url, options });
+
+        if (this.cache.has(cacheKey)) {
+            return this.cache.get(cacheKey);
+        }
+
+        try {
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            this.cache.set(cacheKey, data);
+            this.emit('dataFetched', { endpoint, data });
+            return data;
+        } catch (error) {
+            this.emit('error', { endpoint, error });
+            throw error;
+        }
+    }
+}
+
+// Arrow functions and destructuring
+const processUsers = (users) => {
+    return users
+        .filter(({ active }) => active)
+        .map(({ name, email, role }) => ({
+            displayName: name.toUpperCase(),
+            contact: email,
+            isAdmin: role === 'admin',
+        }))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+};
+
+// Async main with top-level await pattern
+const main = async () => {
+    const service = new DataService(API_BASE);
+
+    service.on('error', ({ endpoint, error }) => {
+        console.error(`Failed to fetch ${endpoint}:`, error.message);
+    });
+
+    const users = await service.fetchData('users');
+    const processed = processUsers(users);
+    console.log(`Processed ${processed.length} active users`);
+
+    // Template literals and nullish coalescing
+    for (const user of processed) {
+        const status = user.isAdmin ? 'Admin' : 'User';
+        console.log(`${user.displayName} (${status}) - ${user.contact ?? 'N/A'}`);
+    }
+};
+
+main().catch(console.error);";
+        }
+    }
+
+    internal class DarkMenuRenderer : ToolStripProfessionalRenderer
+    {
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+        {
+            var rc = new Rectangle(Point.Empty, e.Item.Size);
+            Color c = e.Item.Selected ? Color.FromArgb(62, 62, 64) : Color.FromArgb(45, 45, 45);
+            using (var brush = new SolidBrush(c))
+                e.Graphics.FillRectangle(brush, rc);
+        }
+
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            using (var brush = new SolidBrush(Color.FromArgb(45, 45, 45)))
+                e.Graphics.FillRectangle(brush, e.AffectedBounds);
+        }
+
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+        {
+            e.TextColor = Color.White;
+            base.OnRenderItemText(e);
+        }
+
+        protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+        {
+            var rc = new Rectangle(Point.Empty, e.Item.Size);
+            using (var brush = new SolidBrush(Color.FromArgb(45, 45, 45)))
+                e.Graphics.FillRectangle(brush, rc);
+            int y = rc.Height / 2;
+            using (var pen = new Pen(Color.FromArgb(70, 70, 70)))
+                e.Graphics.DrawLine(pen, 30, y, rc.Width - 4, y);
+        }
+
+        protected override void OnRenderImageMargin(ToolStripRenderEventArgs e)
+        {
+            using (var brush = new SolidBrush(Color.FromArgb(45, 45, 45)))
+                e.Graphics.FillRectangle(brush, e.AffectedBounds);
+        }
+
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+        }
+    }
+}

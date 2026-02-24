@@ -1,0 +1,12 @@
+*.exe
+*.dll
+*.pdb
+*.mdb
+*.cache
+*.suo
+*.user
+bin/
+obj/
+*.pidb
+*.userprefs
+.vs/

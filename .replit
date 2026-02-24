@@ -1,0 +1,29 @@
+[agent]
+expertMode = true
+
+[nix]
+channel = "stable-25_05"
+packages = ["mono", "xorg.libX11", "xorg.libXcomposite", "xorg.libXext", "xorg.libXrender", "fontconfig", "freetype"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Code Editor"
+
+[[workflows.workflow]]
+name = "Code Editor"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd /home/runner/workspace && bash build.sh && mono CodeEditor.exe"
+
+[workflows.workflow.metadata]
+outputType = "vnc"
