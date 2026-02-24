@@ -4,136 +4,87 @@ using System.Windows.Forms;
 
 namespace CodeEditor
 {
-    public class TestForm : Form
+    public partial class TestForm : Form
     {
-        private CodeTextBox _codeTextBox;
-        private ComboBox _languageSelector;
-        private Label _statusLabel;
-        private MenuStrip _menuStrip;
-
         public TestForm()
         {
-            Text = "Code Editor - Test Form";
-            Size = new Size(1100, 750);
-            StartPosition = FormStartPosition.CenterScreen;
-            BackColor = Color.FromArgb(45, 45, 45);
-            ForeColor = Color.White;
-
-            SetupMenu();
-            SetupToolbar();
-            SetupEditor();
-            SetupStatusBar();
+            InitializeComponent();
 
             _codeTextBox.Text = GetSampleCSharpCode();
             _languageSelector.SelectedIndex = 0;
         }
 
-        private void SetupMenu()
+        private void FileNewMenuItem_Click(object sender, EventArgs e)
         {
-            _menuStrip = new MenuStrip();
-            _menuStrip.BackColor = Color.FromArgb(45, 45, 45);
-            _menuStrip.ForeColor = Color.White;
-            _menuStrip.Renderer = new DarkMenuRenderer();
-
-            var fileMenu = new ToolStripMenuItem("File");
-            fileMenu.DropDownItems.Add("New", null, (s, e) => { _codeTextBox.Text = ""; });
-            fileMenu.DropDownItems.Add(new ToolStripSeparator());
-            fileMenu.DropDownItems.Add("Exit", null, (s, e) => Close());
-
-            var editMenu = new ToolStripMenuItem("Edit");
-            editMenu.DropDownItems.Add("Undo (Ctrl+Z)", null, (s, e) => _codeTextBox.PerformUndo());
-            editMenu.DropDownItems.Add("Redo (Ctrl+Y)", null, (s, e) => _codeTextBox.PerformRedo());
-            editMenu.DropDownItems.Add(new ToolStripSeparator());
-            editMenu.DropDownItems.Add("Cut (Ctrl+X)", null, (s, e) => _codeTextBox.Cut());
-            editMenu.DropDownItems.Add("Copy (Ctrl+C)", null, (s, e) => _codeTextBox.Copy());
-            editMenu.DropDownItems.Add("Paste (Ctrl+V)", null, (s, e) => _codeTextBox.Paste());
-            editMenu.DropDownItems.Add(new ToolStripSeparator());
-            editMenu.DropDownItems.Add("Select All (Ctrl+A)", null, (s, e) => _codeTextBox.SelectAll());
-            editMenu.DropDownItems.Add("Duplicate Line (Ctrl+D)", null, (s, e) => _codeTextBox.DuplicateLine());
-            editMenu.DropDownItems.Add("Delete Line (Ctrl+Shift+L)", null, (s, e) => _codeTextBox.DeleteLine());
-
-            var viewMenu = new ToolStripMenuItem("View");
-            var lineNumbers = new ToolStripMenuItem("Line Numbers") { Checked = true, CheckOnClick = true };
-            lineNumbers.Click += (s, e) => _codeTextBox.ShowLineNumbers = lineNumbers.Checked;
-            viewMenu.DropDownItems.Add(lineNumbers);
-            var currentLine = new ToolStripMenuItem("Highlight Current Line") { Checked = true, CheckOnClick = true };
-            currentLine.Click += (s, e) => _codeTextBox.HighlightCurrentLine = currentLine.Checked;
-            viewMenu.DropDownItems.Add(currentLine);
-            viewMenu.DropDownItems.Add(new ToolStripSeparator());
-            viewMenu.DropDownItems.Add("Go To Line...", null, (s, e) => ShowGoToLineDialog());
-
-            _menuStrip.Items.AddRange(new ToolStripItem[] { fileMenu, editMenu, viewMenu });
-            MainMenuStrip = _menuStrip;
-            Controls.Add(_menuStrip);
+            _codeTextBox.Text = "";
         }
 
-        private void SetupToolbar()
+        private void FileExitMenuItem_Click(object sender, EventArgs e)
         {
-            var toolbar = new Panel();
-            toolbar.Dock = DockStyle.Top;
-            toolbar.Height = 36;
-            toolbar.BackColor = Color.FromArgb(37, 37, 38);
-            toolbar.Padding = new Padding(5, 4, 5, 4);
-
-            var label = new Label();
-            label.Text = "Language:";
-            label.ForeColor = Color.FromArgb(200, 200, 200);
-            label.AutoSize = true;
-            label.Location = new Point(8, 9);
-            toolbar.Controls.Add(label);
-
-            _languageSelector = new ComboBox();
-            _languageSelector.DropDownStyle = ComboBoxStyle.DropDownList;
-            _languageSelector.Location = new Point(80, 5);
-            _languageSelector.Width = 160;
-            _languageSelector.BackColor = Color.FromArgb(60, 60, 60);
-            _languageSelector.ForeColor = Color.White;
-            _languageSelector.FlatStyle = FlatStyle.Flat;
-            _languageSelector.Items.AddRange(new object[] { "C#", "Python", "JavaScript", "Plain Text" });
-            _languageSelector.SelectedIndexChanged += LanguageChanged;
-            toolbar.Controls.Add(_languageSelector);
-
-            var helpLabel = new Label();
-            helpLabel.Text = "Shortcuts: Ctrl+D Duplicate | Ctrl+Shift+L Delete Line | Ctrl+Z/Y Undo/Redo | Tab/Shift+Tab Indent | Ctrl+U Case";
-            helpLabel.ForeColor = Color.FromArgb(140, 140, 140);
-            helpLabel.AutoSize = true;
-            helpLabel.Location = new Point(260, 9);
-            toolbar.Controls.Add(helpLabel);
-
-            Controls.Add(toolbar);
+            Close();
         }
 
-        private void SetupEditor()
+        private void EditUndoMenuItem_Click(object sender, EventArgs e)
         {
-            _codeTextBox = new CodeTextBox();
-            _codeTextBox.Dock = DockStyle.Fill;
-            _codeTextBox.Ruleset = SyntaxRuleset.CreateCSharpRuleset();
-            _codeTextBox.TabSize = 4;
-            _codeTextBox.TextChanged += (s, e) => UpdateStatus();
-            Controls.Add(_codeTextBox);
-            _codeTextBox.BringToFront();
+            _codeTextBox.PerformUndo();
         }
 
-        private void SetupStatusBar()
+        private void EditRedoMenuItem_Click(object sender, EventArgs e)
         {
-            _statusLabel = new Label();
-            _statusLabel.Dock = DockStyle.Bottom;
-            _statusLabel.Height = 24;
-            _statusLabel.BackColor = Color.FromArgb(0, 122, 204);
-            _statusLabel.ForeColor = Color.White;
-            _statusLabel.TextAlign = ContentAlignment.MiddleLeft;
-            _statusLabel.Padding = new Padding(8, 0, 0, 0);
-            _statusLabel.Text = "Ready";
-            Controls.Add(_statusLabel);
+            _codeTextBox.PerformRedo();
         }
 
-        private void UpdateStatus()
+        private void EditCutMenuItem_Click(object sender, EventArgs e)
         {
-            var pos = _codeTextBox.CaretPosition;
-            _statusLabel.Text = $"Ln {pos.Line + 1}, Col {pos.Column + 1}  |  Lines: {_codeTextBox.LineCount}  |  {_codeTextBox.Ruleset.LanguageName}";
+            _codeTextBox.Cut();
         }
 
-        private void LanguageChanged(object sender, EventArgs e)
+        private void EditCopyMenuItem_Click(object sender, EventArgs e)
+        {
+            _codeTextBox.Copy();
+        }
+
+        private void EditPasteMenuItem_Click(object sender, EventArgs e)
+        {
+            _codeTextBox.Paste();
+        }
+
+        private void EditSelectAllMenuItem_Click(object sender, EventArgs e)
+        {
+            _codeTextBox.SelectAll();
+        }
+
+        private void EditDuplicateLineMenuItem_Click(object sender, EventArgs e)
+        {
+            _codeTextBox.DuplicateLine();
+        }
+
+        private void EditDeleteLineMenuItem_Click(object sender, EventArgs e)
+        {
+            _codeTextBox.DeleteLine();
+        }
+
+        private void ViewLineNumbersMenuItem_Click(object sender, EventArgs e)
+        {
+            _codeTextBox.ShowLineNumbers = _viewLineNumbersMenuItem.Checked;
+        }
+
+        private void ViewHighlightCurrentLineMenuItem_Click(object sender, EventArgs e)
+        {
+            _codeTextBox.HighlightCurrentLine = _viewHighlightCurrentLineMenuItem.Checked;
+        }
+
+        private void ViewGoToLineMenuItem_Click(object sender, EventArgs e)
+        {
+            ShowGoToLineDialog();
+        }
+
+        private void CodeTextBox_TextChanged(object sender, EventArgs e)
+        {
+            UpdateStatus();
+        }
+
+        private void LanguageSelector_SelectedIndexChanged(object sender, EventArgs e)
         {
             switch (_languageSelector.SelectedIndex)
             {
@@ -155,6 +106,12 @@ namespace CodeEditor
                     break;
             }
             UpdateStatus();
+        }
+
+        private void UpdateStatus()
+        {
+            var pos = _codeTextBox.CaretPosition;
+            _statusLabel.Text = $"Ln {pos.Line + 1}, Col {pos.Column + 1}  |  Lines: {_codeTextBox.LineCount}  |  {_codeTextBox.Ruleset.LanguageName}";
         }
 
         private void ShowGoToLineDialog()
@@ -424,49 +381,6 @@ const main = async () => {
 };
 
 main().catch(console.error);";
-        }
-    }
-
-    internal class DarkMenuRenderer : ToolStripProfessionalRenderer
-    {
-        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
-        {
-            var rc = new Rectangle(Point.Empty, e.Item.Size);
-            Color c = e.Item.Selected ? Color.FromArgb(62, 62, 64) : Color.FromArgb(45, 45, 45);
-            using (var brush = new SolidBrush(c))
-                e.Graphics.FillRectangle(brush, rc);
-        }
-
-        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
-        {
-            using (var brush = new SolidBrush(Color.FromArgb(45, 45, 45)))
-                e.Graphics.FillRectangle(brush, e.AffectedBounds);
-        }
-
-        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
-        {
-            e.TextColor = Color.White;
-            base.OnRenderItemText(e);
-        }
-
-        protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
-        {
-            var rc = new Rectangle(Point.Empty, e.Item.Size);
-            using (var brush = new SolidBrush(Color.FromArgb(45, 45, 45)))
-                e.Graphics.FillRectangle(brush, rc);
-            int y = rc.Height / 2;
-            using (var pen = new Pen(Color.FromArgb(70, 70, 70)))
-                e.Graphics.DrawLine(pen, 30, y, rc.Width - 4, y);
-        }
-
-        protected override void OnRenderImageMargin(ToolStripRenderEventArgs e)
-        {
-            using (var brush = new SolidBrush(Color.FromArgb(45, 45, 45)))
-                e.Graphics.FillRectangle(brush, e.AffectedBounds);
-        }
-
-        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
-        {
         }
     }
 }

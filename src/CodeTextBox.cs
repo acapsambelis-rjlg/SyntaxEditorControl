@@ -9,7 +9,7 @@ using System.Windows.Forms;
 
 namespace CodeEditor
 {
-    public class CodeTextBox : Control
+    public partial class CodeTextBox : Control
     {
         private TextDocument _doc = new TextDocument();
         private SyntaxRuleset _ruleset;
@@ -30,16 +30,14 @@ namespace CodeEditor
 
         private int _scrollX;
         private int _scrollY;
-        private VScrollBar _vScrollBar;
-        private HScrollBar _hScrollBar;
 
-        private Timer _caretTimer;
         private bool _caretVisible = true;
         private int _desiredColumn = -1;
         private int _tabSize = 4;
         private bool _showLineNumbers = true;
         private bool _highlightCurrentLine = true;
         private bool _autoIndent = true;
+        private bool _initialized;
 
         private Dictionary<int, List<MultiLineSpan>> _multiLineSpans;
         private bool _multiLineDirty = true;
@@ -76,27 +74,19 @@ namespace CodeEditor
             Cursor = Cursors.IBeam;
             TabStop = true;
 
-            _vScrollBar = new VScrollBar();
-            _vScrollBar.Dock = DockStyle.Right;
-            _vScrollBar.ValueChanged += (s, e) => { _scrollY = _vScrollBar.Value; Invalidate(); };
-            Controls.Add(_vScrollBar);
+            InitializeComponent();
 
-            _hScrollBar = new HScrollBar();
-            _hScrollBar.Dock = DockStyle.Bottom;
-            _hScrollBar.ValueChanged += (s, e) => { _scrollX = _hScrollBar.Value; Invalidate(); };
-            Controls.Add(_hScrollBar);
-
-            _caretTimer = new Timer();
-            _caretTimer.Interval = 530;
-            _caretTimer.Tick += (s, e) => { _caretVisible = !_caretVisible; InvalidateCaretLine(); };
             _caretTimer.Start();
 
-            _doc.TextChanged += (s, e) => { _multiLineDirty = true; UpdateScrollBars(); Invalidate(); OnTextChanged(EventArgs.Empty); };
+            _doc.TextChanged += (s, e) => { _multiLineDirty = true; if (_initialized) { UpdateScrollBars(); Invalidate(); } OnTextChanged(EventArgs.Empty); };
 
             MeasureCharSize();
-            UpdateScrollBars();
             UpdateGutterWidth();
+            _initialized = true;
+            UpdateScrollBars();
         }
+
+        #region Properties
 
         public SyntaxRuleset Ruleset
         {
@@ -152,6 +142,32 @@ namespace CodeEditor
 
         public TextDocument Document => _doc;
 
+        #endregion
+
+        #region Designer Event Handlers
+
+        private void VScrollBar_ValueChanged(object sender, EventArgs e)
+        {
+            _scrollY = _vScrollBar.Value;
+            Invalidate();
+        }
+
+        private void HScrollBar_ValueChanged(object sender, EventArgs e)
+        {
+            _scrollX = _hScrollBar.Value;
+            Invalidate();
+        }
+
+        private void CaretTimer_Tick(object sender, EventArgs e)
+        {
+            _caretVisible = !_caretVisible;
+            InvalidateCaretLine();
+        }
+
+        #endregion
+
+        #region Measurement and Scrolling
+
         private void MeasureCharSize()
         {
             using (var bmp = new Bitmap(1, 1))
@@ -173,7 +189,23 @@ namespace CodeEditor
             _gutterWidth = (int)(digits * _charWidth) + GutterPadding * 2;
         }
 
+        private bool _updatingScrollBars;
+
         private void UpdateScrollBars()
+        {
+            if (!_initialized || _updatingScrollBars) return;
+            _updatingScrollBars = true;
+            try
+            {
+                UpdateScrollBarsInternal();
+            }
+            finally
+            {
+                _updatingScrollBars = false;
+            }
+        }
+
+        private void UpdateScrollBarsInternal()
         {
             int textAreaHeight = ClientSize.Height - _hScrollBar.Height;
             int textAreaWidth = ClientSize.Width - _vScrollBar.Width - _gutterWidth;
@@ -238,6 +270,10 @@ namespace CodeEditor
             Invalidate();
         }
 
+        #endregion
+
+        #region Position and Selection
+
         private TextPosition PositionFromPoint(int x, int y)
         {
             int line = (int)((y + _scrollY * _lineHeight) / _lineHeight);
@@ -281,6 +317,19 @@ namespace CodeEditor
             _caret = range.Start;
             ClearSelection();
         }
+
+        private bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+        private bool IsPositionInSelection(TextPosition pos)
+        {
+            if (!_hasSelection) return false;
+            var range = GetSelectionRange();
+            return pos >= range.Start && pos <= range.End;
+        }
+
+        #endregion
+
+        #region Painting
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -375,6 +424,10 @@ namespace CodeEditor
                 if (run.Style != FontStyle.Regular) f.Dispose();
             }
         }
+
+        #endregion
+
+        #region Syntax Highlighting
 
         private void RebuildMultiLineSpans()
         {
@@ -481,6 +534,10 @@ namespace CodeEditor
             return runs;
         }
 
+        #endregion
+
+        #region Mouse Handling
+
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
@@ -559,7 +616,6 @@ namespace CodeEditor
                     _doc.Delete(range.Start, range.End);
                     if (!dropBeforeSelection)
                     {
-                        int deletedLen = _dragText.Length;
                         int newlines = 0;
                         foreach (char c in _dragText) if (c == '\n') newlines++;
 
@@ -605,15 +661,6 @@ namespace CodeEditor
             Invalidate();
         }
 
-        private bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
-
-        private bool IsPositionInSelection(TextPosition pos)
-        {
-            if (!_hasSelection) return false;
-            var range = GetSelectionRange();
-            return pos >= range.Start && pos <= range.End;
-        }
-
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             base.OnMouseWheel(e);
@@ -622,6 +669,10 @@ namespace CodeEditor
             UpdateScrollBars();
             Invalidate();
         }
+
+        #endregion
+
+        #region Keyboard Handling
 
         protected override bool IsInputKey(Keys keyData)
         {
@@ -699,6 +750,10 @@ namespace CodeEditor
             e.Handled = true;
             InsertCharacter(e.KeyChar);
         }
+
+        #endregion
+
+        #region Text Editing Operations
 
         private void InsertCharacter(char c)
         {
@@ -888,7 +943,6 @@ namespace CodeEditor
             _doc.EndComposite(_caret);
 
             int adjustStart = indent ? _tabSize : -Math.Min(_tabSize, range.Start.Column);
-            int adjustEnd = indent ? _tabSize : -Math.Min(_tabSize, range.End.Column);
 
             _selectionAnchor = new TextPosition(startLine, Math.Max(0, range.Start.Column + adjustStart));
             _caret = new TextPosition(endLine, Math.Max(0, _doc.GetLineLength(endLine)));
@@ -897,6 +951,10 @@ namespace CodeEditor
             ResetCaretBlink();
             Invalidate();
         }
+
+        #endregion
+
+        #region Caret Navigation
 
         private void MoveCaret(int lineDir, int colDir, bool shift, bool ctrl)
         {
@@ -1094,6 +1152,10 @@ namespace CodeEditor
             }
         }
 
+        #endregion
+
+        #region Public Commands
+
         public void SelectAll()
         {
             _selectionAnchor = new TextPosition(0, 0);
@@ -1251,6 +1313,10 @@ namespace CodeEditor
             Invalidate();
         }
 
+        #endregion
+
+        #region Focus and Resize
+
         protected override void OnGotFocus(EventArgs e)
         {
             base.OnGotFocus(e);
@@ -1274,14 +1340,6 @@ namespace CodeEditor
             Invalidate();
         }
 
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _caretTimer?.Dispose();
-                _editorFont?.Dispose();
-            }
-            base.Dispose(disposing);
-        }
+        #endregion
     }
 }
