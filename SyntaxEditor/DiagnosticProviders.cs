@@ -312,6 +312,9 @@ namespace CodeEditor
                 bool isTerminator = Regex.IsMatch(trimmed, @"^(return\b|break\s*;|continue\s*;|throw\b)");
                 if (!isTerminator) continue;
 
+                if (!trimmed.EndsWith(";"))
+                    continue;
+
                 int indent = lines[i].Length - trimmed.Length;
 
                 for (int j = i + 1; j < lines.Length; j++)
@@ -731,6 +734,10 @@ namespace CodeEditor
 
                 bool isTerminator = Regex.IsMatch(trimmed, @"^(return\b|break\s*$|continue\s*$|raise\b)");
                 if (!isTerminator) continue;
+
+                if (trimmed.EndsWith("[") || trimmed.EndsWith("(") || trimmed.EndsWith("{") ||
+                    trimmed.EndsWith(",") || trimmed.EndsWith("\\"))
+                    continue;
 
                 int indent = lines[i].Length - trimmed.Length;
 
@@ -1174,6 +1181,9 @@ namespace CodeEditor
 
                 bool isTerminator = Regex.IsMatch(trimmed, @"^(return\b|break\s*;|continue\s*;|throw\b)");
                 if (!isTerminator) continue;
+
+                if (!trimmed.EndsWith(";"))
+                    continue;
 
                 int indent = lines[i].Length - trimmed.Length;
 
