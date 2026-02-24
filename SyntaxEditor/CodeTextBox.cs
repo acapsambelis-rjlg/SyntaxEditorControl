@@ -2027,28 +2027,48 @@ namespace CodeEditor
                         case DiagnosticSeverity.Warning:
                             squiggleColor = Color.FromArgb(206, 145, 0);
                             break;
+                        case DiagnosticSeverity.Hint:
+                            squiggleColor = Color.FromArgb(160, 160, 160);
+                            break;
                         default:
                             squiggleColor = Color.FromArgb(0, 128, 0);
                             break;
                     }
 
-                    using (var pen = new Pen(squiggleColor, 1f))
+                    if (diag.Severity == DiagnosticSeverity.Hint)
                     {
-                        float waveHeight = 2f;
-                        float waveWidth = 4f;
-                        var points = new List<PointF>();
-                        float cx = x1;
-                        bool up = true;
-                        while (cx < x2)
+                        using (var brush = new SolidBrush(squiggleColor))
                         {
-                            points.Add(new PointF(cx, up ? baseline - waveHeight : baseline));
-                            cx += waveWidth / 2;
-                            up = !up;
+                            float dotSize = 2f;
+                            float dotSpacing = 4f;
+                            float cx = x1;
+                            while (cx < x2)
+                            {
+                                g.FillEllipse(brush, cx, baseline - 1f, dotSize, dotSize);
+                                cx += dotSpacing;
+                            }
                         }
-                        points.Add(new PointF(x2, up ? baseline - waveHeight : baseline));
+                    }
+                    else
+                    {
+                        using (var pen = new Pen(squiggleColor, 1f))
+                        {
+                            float waveHeight = 2f;
+                            float waveWidth = 4f;
+                            var points = new List<PointF>();
+                            float cx = x1;
+                            bool up = true;
+                            while (cx < x2)
+                            {
+                                points.Add(new PointF(cx, up ? baseline - waveHeight : baseline));
+                                cx += waveWidth / 2;
+                                up = !up;
+                            }
+                            points.Add(new PointF(x2, up ? baseline - waveHeight : baseline));
 
-                        if (points.Count >= 2)
-                            g.DrawLines(pen, points.ToArray());
+                            if (points.Count >= 2)
+                                g.DrawLines(pen, points.ToArray());
+                        }
                     }
                 }
             }

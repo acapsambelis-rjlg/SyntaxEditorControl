@@ -7,7 +7,8 @@ namespace CodeEditor
     {
         Error,
         Warning,
-        Info
+        Info,
+        Hint
     }
 
     public enum SymbolKind

@@ -64,7 +64,7 @@ build.sh                               - Mono build script (for Replit environme
 ## Diagnostics System
 - **IDiagnosticProvider** interface: implement `List<Diagnostic> Analyze(string text)` to provide diagnostics
   - Also supports `Analyze(string text, AnalysisContext context)` for cross-file symbol resolution
-- **DiagnosticSeverity**: Error (red squiggle), Warning (yellow squiggle), Info (green squiggle)
+- **DiagnosticSeverity**: Error (red squiggle), Warning (yellow squiggle), Info (green squiggle), Hint (gray dots)
 - **CodeTextBox.DiagnosticProvider** property: set to auto-analyze on text change (500ms debounce)
 - **CodeTextBox.AnalysisContext** property: set to provide cross-file symbol info to the provider
 - **CodeTextBox.SetDiagnostics()** / **ClearDiagnostics()**: manually set/clear diagnostics
