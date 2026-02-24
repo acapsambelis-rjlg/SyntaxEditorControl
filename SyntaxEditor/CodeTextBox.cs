@@ -664,9 +664,61 @@ namespace CodeEditor
         {
             if (_tabSize <= 0) return;
 
+            if (_ruleset.IndentGuideAlign == IndentGuideAlignment.Center)
+                PaintBraceIndentGuides(g, firstVisIdx, lastVisIdx);
+            else
+                PaintIndentationGuides(g, firstVisIdx, lastVisIdx);
+        }
+
+        private void PaintBraceIndentGuides(Graphics g, int firstVisIdx, int lastVisIdx)
+        {
+            if (_foldRegions.Count == 0) return;
+
+            float centerOffset = _charWidth / 2f;
+
+            using (var pen = new Pen(_ruleset.IndentGuideColor, 1f))
+            {
+                pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dot;
+                foreach (var region in _foldRegions)
+                {
+                    if (region.IsCollapsed) continue;
+
+                    int braceLineIdx = -1;
+                    for (int i = region.StartLine; i <= region.EndLine; i++)
+                    {
+                        string lt = _doc.GetLine(i).TrimStart();
+                        if (lt.Length > 0 && lt[0] == '{') { braceLineIdx = i; break; }
+                    }
+                    if (braceLineIdx < 0) continue;
+
+                    string braceLine = _doc.GetLine(braceLineIdx);
+                    int braceCol = 0;
+                    for (int i = 0; i < braceLine.Length; i++)
+                    {
+                        if (braceLine[i] == '{') { braceCol = i; break; }
+                    }
+
+                    float x = _gutterWidth + TextLeftPadding + braceCol * _charWidth - _scrollX + centerOffset;
+                    if (x <= _gutterWidth || x >= ClientSize.Width - _vScrollBar.Width) continue;
+
+                    int drawStart = braceLineIdx + 1;
+                    int drawEnd = region.EndLine - 1;
+
+                    for (int vi = firstVisIdx; vi <= lastVisIdx; vi++)
+                    {
+                        int actualLine = VisibleToActualLine(vi);
+                        if (actualLine < drawStart || actualLine > drawEnd) continue;
+
+                        float y = (vi - _scrollY) * _lineHeight;
+                        g.DrawLine(pen, x, y, x, y + _lineHeight);
+                    }
+                }
+            }
+        }
+
+        private void PaintIndentationGuides(Graphics g, int firstVisIdx, int lastVisIdx)
+        {
             float guideSpacing = _tabSize * _charWidth;
-            float centerOffset = _ruleset.IndentGuideAlign == IndentGuideAlignment.Center
-                ? _charWidth / 2f : 0f;
             using (var pen = new Pen(_ruleset.IndentGuideColor, 1f))
             {
                 pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dot;
@@ -693,7 +745,7 @@ namespace CodeEditor
 
                     for (int level = 1; level <= guideLevels; level++)
                     {
-                        float x = _gutterWidth + TextLeftPadding + level * guideSpacing - _scrollX + centerOffset;
+                        float x = _gutterWidth + TextLeftPadding + level * guideSpacing - _scrollX;
                         if (x > _gutterWidth && x < ClientSize.Width - _vScrollBar.Width)
                             g.DrawLine(pen, x, y, x, y + _lineHeight);
                     }
