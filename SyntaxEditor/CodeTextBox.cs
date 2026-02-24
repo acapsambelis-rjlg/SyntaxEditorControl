@@ -14,6 +14,9 @@ namespace CodeEditor
         private TextDocument _doc = new TextDocument();
         private SyntaxRuleset _ruleset;
         private Font _editorFont;
+        private float _baseFontSize = 13f;
+        private const float MinFontSize = 6f;
+        private const float MaxFontSize = 48f;
         private float _charWidth;
         private float _lineHeight;
         private int _gutterWidth = 50;
@@ -68,7 +71,8 @@ namespace CodeEditor
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
                      ControlStyles.Selectable, true);
 
-            _editorFont = new Font("Courier New", 13f, FontStyle.Regular);
+            _baseFontSize = 13f;
+            _editorFont = new Font("Courier New", _baseFontSize, FontStyle.Regular);
             _ruleset = SyntaxRuleset.CreatePlainTextRuleset();
 
             BackColor = _ruleset.BackgroundColor;
@@ -109,6 +113,7 @@ namespace CodeEditor
             set
             {
                 _editorFont = value ?? new Font("Courier New", 13f);
+                _baseFontSize = _editorFont.Size;
                 MeasureCharSize();
                 UpdateScrollBars();
                 UpdateGutterWidth();
@@ -732,6 +737,24 @@ namespace CodeEditor
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             base.OnMouseWheel(e);
+
+            if ((ModifierKeys & Keys.Control) != 0)
+            {
+                float step = e.Delta > 0 ? 1f : -1f;
+                float newSize = Math.Max(MinFontSize, Math.Min(MaxFontSize, _baseFontSize + step));
+                if (newSize != _baseFontSize)
+                {
+                    _baseFontSize = newSize;
+                    _editorFont = new Font(_editorFont.FontFamily, _baseFontSize, _editorFont.Style);
+                    MeasureCharSize();
+                    UpdateGutterWidth();
+                    _multiLineDirty = true;
+                    UpdateScrollBars();
+                    Invalidate();
+                }
+                return;
+            }
+
             int delta = -(e.Delta / 120) * 3;
             _scrollY = Math.Max(0, Math.Min(_scrollY + delta, Math.Max(0, _doc.LineCount - 1)));
             UpdateScrollBars();
