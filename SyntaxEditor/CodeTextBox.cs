@@ -128,7 +128,9 @@ namespace CodeEditor
             public FontStyle Style;
         }
 
-        public CodeTextBox()
+        public CodeTextBox() : this(EditorProfile.Full) { }
+
+        public CodeTextBox(EditorProfile profile)
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
@@ -172,6 +174,7 @@ namespace CodeEditor
             MeasureCharSize();
             UpdateGutterWidth();
             _initialized = true;
+            ApplyProfile(profile);
             UpdateScrollBars();
         }
 
