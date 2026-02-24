@@ -666,7 +666,7 @@ namespace CodeEditor
 
             float guideSpacing = _tabSize * _charWidth;
             float centerOffset = _ruleset.IndentGuideAlign == IndentGuideAlignment.Center
-                ? (_tabSize * _charWidth) / 2f : 0f;
+                ? _charWidth / 2f : 0f;
             using (var pen = new Pen(_ruleset.IndentGuideColor, 1f))
             {
                 pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dot;

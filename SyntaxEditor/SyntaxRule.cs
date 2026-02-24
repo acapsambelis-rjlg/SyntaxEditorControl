@@ -103,6 +103,7 @@ namespace CodeEditor
         {
             var rs = new SyntaxRuleset("C#");
             rs.LineCommentToken = "//";
+            rs.IndentGuideAlign = IndentGuideAlignment.Center;
             rs.AddRule("Comment", @"//.*$|/\*[\s\S]*?\*/", Color.FromArgb(0, 128, 0), FontStyle.Italic);
             rs.AddRule("InterpolatedString", "\\$\"(?:[^\"\\\\]|\\\\.)*\"", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\{[^}]*\}");
             rs.AddRule("String", "\"(?:[^\"\\\\]|\\\\.)*\"|@\"(?:\"\"|[^\"])*\"", Color.FromArgb(163, 21, 21));
@@ -143,6 +144,7 @@ namespace CodeEditor
         {
             var rs = new SyntaxRuleset("JavaScript");
             rs.LineCommentToken = "//";
+            rs.IndentGuideAlign = IndentGuideAlignment.Center;
             rs.AddRule("Comment", @"//.*$|/\*[\s\S]*?\*/", Color.FromArgb(0, 128, 0), FontStyle.Italic);
             rs.AddRule("TemplateString", @"`(?:[^`\\]|\\.|\$\{[^}]*\})*`", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\$\{[^}]*\}");
             rs.AddRule("String", "\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", Color.FromArgb(163, 21, 21));
