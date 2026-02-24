@@ -56,7 +56,6 @@
     <Compile Include="Diagnostic.cs" />
     <Compile Include="DiagnosticProviders.cs" />
     <Compile Include="FoldingProvider.cs" />
-    <Compile Include="MenuRenderer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SyntaxRule.cs" />
