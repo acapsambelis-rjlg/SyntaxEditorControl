@@ -534,7 +534,7 @@ namespace CodeEditor
 
                 if (c == '=' && line[j + 1] == '=' && (j + 2 >= line.Length || line[j + 2] != '='))
                 {
-                    if (j > 0 && (line[j - 1] == '!' || line[j - 1] == '<' || line[j - 1] == '>')) continue;
+                    if (j > 0 && (line[j - 1] == '!' || line[j - 1] == '<' || line[j - 1] == '>' || line[j - 1] == '=')) continue;
                     diagnostics.Add(new Diagnostic(i, j, 2,
                         "Use '===' instead of '==' for strict equality comparison", DiagnosticSeverity.Warning));
                 }
