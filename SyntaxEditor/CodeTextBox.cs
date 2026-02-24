@@ -638,7 +638,7 @@ namespace CodeEditor
                     else
                     {
                         int lineIndent = line.Length - trimmed.Length;
-                        guideLevels = lineIndent / _tabSize;
+                        guideLevels = lineIndent / _tabSize - 1;
                     }
 
                     for (int level = 1; level <= guideLevels; level++)
