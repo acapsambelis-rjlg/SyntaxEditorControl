@@ -98,7 +98,8 @@ build.sh                               - Mono build script (for Replit environme
 - **CodeTextBox.FoldingProvider** property: set to enable folding
 - Fold margin with +/- toggle boxes in gutter
 - Click fold margin to collapse/expand regions
-- Collapsed lines are hidden from rendering
+- Collapsed lines are hidden from rendering; `[...]` indicator drawn at end of fold start line
+- **BraceFoldingProvider** attaches fold to the declaration line (line before lone `{` brace)
 - Collapse state preserved across text edits
 - **Built-in providers**: BraceFoldingProvider (C#/JS), IndentFoldingProvider (Python)
 

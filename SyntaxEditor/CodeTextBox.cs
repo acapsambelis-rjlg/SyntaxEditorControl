@@ -2406,7 +2406,33 @@ namespace CodeEditor
                     if (region.IsCollapsed)
                         g.DrawLine(pen, cx, cy - 2, cx, cy + 2);
                 }
+
+                if (region.IsCollapsed)
+                {
+                    PaintCollapsedIndicator(g, actualLine, y);
+                }
             }
+        }
+
+        private void PaintCollapsedIndicator(Graphics g, int line, float y)
+        {
+            string lineText = _doc.GetLine(line);
+            float textEndX = _gutterWidth + TextLeftPadding + lineText.Length * _charWidth - _scrollX;
+
+            float boxX = textEndX + 4;
+            float boxY = y + 2;
+            float boxH = _lineHeight - 4;
+
+            string indicator = "...";
+            var indicatorSize = g.MeasureString(indicator, _editorFont, 0, StringFormat.GenericTypographic);
+            float boxW = indicatorSize.Width + 6;
+
+            using (var bgBrush = new SolidBrush(Color.FromArgb(230, 230, 230)))
+                g.FillRectangle(bgBrush, boxX, boxY, boxW, boxH);
+            using (var borderPen = new Pen(Color.FromArgb(180, 180, 180), 1f))
+                g.DrawRectangle(borderPen, boxX, boxY, boxW, boxH);
+            using (var textBrush = new SolidBrush(Color.FromArgb(100, 100, 100)))
+                g.DrawString(indicator, _editorFont, textBrush, boxX + 3, y + 1, StringFormat.GenericTypographic);
         }
 
         #endregion

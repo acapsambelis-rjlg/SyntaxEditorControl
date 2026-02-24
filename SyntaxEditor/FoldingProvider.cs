@@ -63,7 +63,20 @@ namespace CodeEditor
 
                     if (c == '{')
                     {
-                        stack.Push(i);
+                        int foldStart = i;
+                        string trimmed = lines[i].TrimStart();
+                        if (trimmed == "{" || trimmed == "{ ")
+                        {
+                            for (int k = i - 1; k >= 0; k--)
+                            {
+                                if (!string.IsNullOrWhiteSpace(lines[k]))
+                                {
+                                    foldStart = k;
+                                    break;
+                                }
+                            }
+                        }
+                        stack.Push(foldStart);
                     }
                     else if (c == '}' && stack.Count > 0)
                     {
