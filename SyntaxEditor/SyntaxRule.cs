@@ -91,6 +91,7 @@ namespace CodeEditor
         {
             var rs = new SyntaxRuleset("C#");
             rs.AddRule("Comment", @"//.*$|/\*[\s\S]*?\*/", Color.FromArgb(0, 128, 0), FontStyle.Italic);
+            rs.AddRule("InterpolatedString", "\\$\"(?:[^\"\\\\]|\\\\.)*\"", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\{[^}]*\}");
             rs.AddRule("String", "\"(?:[^\"\\\\]|\\\\.)*\"|@\"(?:\"\"|[^\"])*\"", Color.FromArgb(163, 21, 21));
             rs.AddRule("Char", @"'(?:[^'\\]|\\.)'", Color.FromArgb(163, 21, 21));
             rs.AddRule("Keyword",
@@ -128,7 +129,7 @@ namespace CodeEditor
         {
             var rs = new SyntaxRuleset("JavaScript");
             rs.AddRule("Comment", @"//.*$|/\*[\s\S]*?\*/", Color.FromArgb(0, 128, 0), FontStyle.Italic);
-            rs.AddRule("TemplateString", @"`(?:[^`\\]|\\.|\$\{[^}]*\})*`", Color.FromArgb(163, 21, 21));
+            rs.AddRule("TemplateString", @"`(?:[^`\\]|\\.|\$\{[^}]*\})*`", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\$\{[^}]*\}");
             rs.AddRule("String", "\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", Color.FromArgb(163, 21, 21));
             rs.AddRule("Keyword",
                 @"\b(?:break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally|for|function|if|import|in|instanceof|let|new|of|return|super|switch|this|throw|try|typeof|var|void|while|with|yield|async|await|from|as|static|get|set)\b",
