@@ -7,6 +7,8 @@ mcs -target:winexe -out:CodeEditor.exe \
     SyntaxEditor/TextDocument.cs \
     SyntaxEditor/Diagnostic.cs \
     SyntaxEditor/DiagnosticProviders.cs \
+    SyntaxEditor/CompletionProvider.cs \
+    SyntaxEditor/FoldingProvider.cs \
     SyntaxEditor/CodeTextBox.Designer.cs \
     SyntaxEditor/CodeTextBox.cs \
     SyntaxEditor/TestForm.Designer.cs \

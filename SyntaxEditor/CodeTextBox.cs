@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
@@ -55,6 +56,40 @@ namespace CodeEditor
         private int _lastTooltipLine = -1;
         private int _lastTooltipCol = -1;
 
+        private TextPosition? _matchBracketA;
+        private TextPosition? _matchBracketB;
+
+        private Panel _findPanel;
+        private TextBox _findInput;
+        private TextBox _replaceInput;
+        private Button _findNextBtn;
+        private Button _findPrevBtn;
+        private Button _replaceBtn;
+        private Button _replaceAllBtn;
+        private Button _findCloseBtn;
+        private CheckBox _caseSensitiveChk;
+        private Label _findCountLabel;
+        private bool _findVisible;
+        private bool _replaceVisible;
+        private List<TextRange> _findMatches = new List<TextRange>();
+        private int _currentMatchIndex = -1;
+
+        private IFoldingProvider _foldingProvider;
+        private List<FoldRegion> _foldRegions = new List<FoldRegion>();
+        private Dictionary<int, bool> _collapsedLines = new Dictionary<int, bool>();
+        private const int FoldMarginWidth = 14;
+        private bool _foldingDirty = true;
+
+        private ICompletionProvider _completionProvider;
+        private ListBox _completionList;
+        private List<CompletionItem> _completionItems = new List<CompletionItem>();
+        private string _completionPartial = "";
+        private bool _completionVisible;
+
+        private List<TextPosition> _carets = new List<TextPosition>();
+        private List<TextPosition> _selectionAnchors = new List<TextPosition>();
+        private List<bool> _hasSelections = new List<bool>();
+
         private struct MultiLineSpan
         {
             public int StartLine;
@@ -93,7 +128,12 @@ namespace CodeEditor
 
             _caretTimer.Start();
 
-            _doc.TextChanged += (s, e) => { _multiLineDirty = true; if (_initialized) { UpdateScrollBars(); Invalidate(); ScheduleDiagnosticUpdate(); } OnTextChanged(EventArgs.Empty); };
+            _doc.TextChanged += (s, e) => {
+                _multiLineDirty = true;
+                _foldingDirty = true;
+                if (_initialized) { UpdateScrollBars(); Invalidate(); ScheduleDiagnosticUpdate(); UpdateFindHighlights(); }
+                OnTextChanged(EventArgs.Empty);
+            };
 
             _diagnosticTimer = new Timer();
             _diagnosticTimer.Interval = 500;
@@ -105,6 +145,9 @@ namespace CodeEditor
             _diagnosticTooltip.AutoPopDelay = 15000;
             _diagnosticTooltip.UseAnimation = false;
             _diagnosticTooltip.UseFading = false;
+
+            InitFindPanel();
+            InitCompletionList();
 
             MeasureCharSize();
             UpdateGutterWidth();
@@ -209,6 +252,26 @@ namespace CodeEditor
             Invalidate();
         }
 
+        public IFoldingProvider FoldingProvider
+        {
+            get { return _foldingProvider; }
+            set
+            {
+                _foldingProvider = value;
+                _foldingDirty = true;
+                _collapsedLines.Clear();
+                RebuildFoldRegions();
+                UpdateGutterWidth();
+                Invalidate();
+            }
+        }
+
+        public ICompletionProvider CompletionProvider
+        {
+            get { return _completionProvider; }
+            set { _completionProvider = value; }
+        }
+
         #endregion
 
         #region Designer Event Handlers
@@ -251,9 +314,11 @@ namespace CodeEditor
 
         private void UpdateGutterWidth()
         {
-            if (!_showLineNumbers) { _gutterWidth = 0; return; }
+            if (!_showLineNumbers) { _gutterWidth = _foldingProvider != null ? FoldMarginWidth : 0; return; }
             int digits = Math.Max(3, _doc.LineCount.ToString().Length);
             _gutterWidth = (int)(digits * _charWidth) + GutterPadding * 2;
+            if (_foldingProvider != null)
+                _gutterWidth += FoldMarginWidth;
         }
 
         private bool _updatingScrollBars;
@@ -404,6 +469,8 @@ namespace CodeEditor
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             g.SmoothingMode = SmoothingMode.HighSpeed;
 
+            RebuildFoldRegions();
+
             g.Clear(_ruleset.BackgroundColor);
 
             int firstLine = _scrollY;
@@ -422,8 +489,13 @@ namespace CodeEditor
             if (_hasSelection)
                 PaintSelection(g, firstLine, lastLine);
 
+            PaintFindHighlights(g, firstLine, lastLine);
+            PaintBracketMatching(g);
+            PaintExtraCursors(g);
+
             for (int i = firstLine; i <= lastLine; i++)
             {
+                if (!IsLineVisible(i)) continue;
                 float y = (i - _scrollY) * _lineHeight;
                 PaintLineText(g, i, y);
             }
@@ -453,6 +525,9 @@ namespace CodeEditor
 
             if (_showLineNumbers)
             {
+                int foldOffset = _foldingProvider != null ? FoldMarginWidth : 0;
+                int lineNumWidth = _gutterWidth - foldOffset;
+
                 using (var gutterBrush = new SolidBrush(_ruleset.LineNumberBackColor))
                     g.FillRectangle(gutterBrush, 0, 0, _gutterWidth, ClientSize.Height);
                 using (var pen = new Pen(_ruleset.GutterSeparatorColor))
@@ -460,13 +535,27 @@ namespace CodeEditor
 
                 for (int i = firstLine; i <= lastLine; i++)
                 {
+                    if (!IsLineVisible(i)) continue;
                     float y = (i - _scrollY) * _lineHeight;
                     string num = (i + 1).ToString();
                     using (var brush = new SolidBrush(i == _caret.Line ? _ruleset.ActiveLineNumberColor : _ruleset.LineNumberForeColor))
                     {
-                        float numX = _gutterWidth - GutterPadding - g.MeasureString(num, _editorFont, 0, StringFormat.GenericTypographic).Width;
+                        float numX = lineNumWidth - GutterPadding - g.MeasureString(num, _editorFont, 0, StringFormat.GenericTypographic).Width;
                         g.DrawString(num, _editorFont, brush, numX, y, StringFormat.GenericTypographic);
                     }
+                    PaintFoldMargin(g, (int)y, i);
+                }
+            }
+            else if (_foldingProvider != null)
+            {
+                using (var gutterBrush = new SolidBrush(_ruleset.LineNumberBackColor))
+                    g.FillRectangle(gutterBrush, 0, 0, _gutterWidth, ClientSize.Height);
+
+                for (int i = firstLine; i <= lastLine; i++)
+                {
+                    if (!IsLineVisible(i)) continue;
+                    float y = (i - _scrollY) * _lineHeight;
+                    PaintFoldMargin(g, (int)y, i);
                 }
             }
         }
@@ -673,9 +762,31 @@ namespace CodeEditor
             base.OnMouseDown(e);
             Focus();
 
+            if (_completionVisible && !_completionList.Bounds.Contains(e.Location))
+                HideCompletion();
+
             if (e.Button == MouseButtons.Left)
             {
+                if (_foldingProvider != null && e.X >= _gutterWidth - FoldMarginWidth && e.X < _gutterWidth)
+                {
+                    RebuildFoldRegions();
+                    int line = (int)(e.Y / _lineHeight) + _scrollY;
+                    if (line >= 0 && line < _doc.LineCount)
+                    {
+                        var region = GetFoldRegionForLine(line);
+                        if (region != null) { ToggleFold(line); return; }
+                    }
+                }
+
                 var pos = PositionFromPoint(e.X, e.Y);
+
+                if ((ModifierKeys & Keys.Control) != 0 && e.X > _gutterWidth)
+                {
+                    AddCursorAtPosition(pos);
+                    return;
+                }
+
+                ClearExtraCursors();
 
                 if (_hasSelection && IsPositionInSelection(pos))
                 {
@@ -698,6 +809,7 @@ namespace CodeEditor
                 _mouseSelecting = true;
                 _desiredColumn = -1;
                 ResetCaretBlink();
+                UpdateBracketMatching();
                 Invalidate();
             }
         }
@@ -867,8 +979,34 @@ namespace CodeEditor
             bool shift = e.Shift;
             bool ctrl = e.Control;
 
+            if (_completionVisible)
+            {
+                if (e.KeyCode == Keys.Up)
+                {
+                    if (_completionList.SelectedIndex > 0) _completionList.SelectedIndex--;
+                    e.Handled = true; e.SuppressKeyPress = true; return;
+                }
+                if (e.KeyCode == Keys.Down)
+                {
+                    if (_completionList.SelectedIndex < _completionItems.Count - 1) _completionList.SelectedIndex++;
+                    e.Handled = true; e.SuppressKeyPress = true; return;
+                }
+                if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Tab)
+                {
+                    AcceptCompletion(); e.Handled = true; e.SuppressKeyPress = true; return;
+                }
+                if (e.KeyCode == Keys.Escape)
+                {
+                    HideCompletion(); e.Handled = true; e.SuppressKeyPress = true; return;
+                }
+            }
+
             switch (e.KeyCode)
             {
+                case Keys.Escape:
+                    if (_findVisible) { HideFind(); e.Handled = true; }
+                    else if (HasMultipleCursors) { ClearExtraCursors(); e.Handled = true; }
+                    break;
                 case Keys.Left: MoveCaret(0, -1, shift, ctrl); e.Handled = true; break;
                 case Keys.Right: MoveCaret(0, 1, shift, ctrl); e.Handled = true; break;
                 case Keys.Up: MoveCaret(-1, 0, shift, ctrl); e.Handled = true; break;
@@ -877,7 +1015,11 @@ namespace CodeEditor
                 case Keys.End: MoveEnd(shift, ctrl); e.Handled = true; break;
                 case Keys.PageUp: MovePage(-1, shift); e.Handled = true; break;
                 case Keys.PageDown: MovePage(1, shift); e.Handled = true; break;
-                case Keys.Back: HandleBackspace(ctrl); e.Handled = true; break;
+                case Keys.Back:
+                    HandleBackspace(ctrl);
+                    if (HasMultipleCursors) DeleteAtAllCursors();
+                    e.Handled = true;
+                    break;
                 case Keys.Delete:
                     if (ctrl && shift) { DuplicateLine(); e.Handled = true; }
                     else { HandleDelete(ctrl); e.Handled = true; }
@@ -893,11 +1035,31 @@ namespace CodeEditor
                     else if (ctrl) { PerformUndo(); e.Handled = true; }
                     break;
                 case Keys.Y: if (ctrl) { PerformRedo(); e.Handled = true; } break;
-                case Keys.D: if (ctrl) { DuplicateLine(); e.Handled = true; } break;
+                case Keys.D:
+                    if (ctrl)
+                    {
+                        SelectNextOccurrence();
+                        e.Handled = true;
+                        e.SuppressKeyPress = true;
+                    }
+                    break;
                 case Keys.L: if (ctrl && shift) { DeleteLine(); e.Handled = true; } break;
                 case Keys.U:
                     if (ctrl && shift) { TransformCase(true); e.Handled = true; }
                     else if (ctrl) { TransformCase(false); e.Handled = true; }
+                    break;
+                case Keys.F:
+                    if (ctrl) { ShowFind(); e.Handled = true; e.SuppressKeyPress = true; }
+                    break;
+                case Keys.H:
+                    if (ctrl) { ShowReplace(); e.Handled = true; e.SuppressKeyPress = true; }
+                    break;
+                case Keys.F3:
+                    if (shift) { FindPrevious(); e.Handled = true; }
+                    else { FindNext(); e.Handled = true; }
+                    break;
+                case Keys.Space:
+                    if (ctrl) { ShowCompletion(); e.Handled = true; e.SuppressKeyPress = true; }
                     break;
                 case Keys.OemOpenBrackets:
                     if (ctrl) { IndentSelection(false); e.Handled = true; }
@@ -906,6 +1068,8 @@ namespace CodeEditor
                     if (ctrl) { IndentSelection(true); e.Handled = true; }
                     break;
             }
+
+            UpdateBracketMatching();
         }
 
         protected override void OnKeyPress(KeyPressEventArgs e)
@@ -916,7 +1080,17 @@ namespace CodeEditor
             if (char.IsControl(e.KeyChar)) return;
 
             e.Handled = true;
+
             InsertCharacter(e.KeyChar);
+            if (HasMultipleCursors)
+                InsertAtAllCursors(e.KeyChar);
+
+            UpdateBracketMatching();
+
+            if (_completionVisible)
+                UpdateCompletionFilter();
+            else if (_completionProvider != null && (char.IsLetterOrDigit(e.KeyChar) || e.KeyChar == '_' || e.KeyChar == '.'))
+                ShowCompletion();
         }
 
         #endregion
@@ -1498,12 +1672,14 @@ namespace CodeEditor
             base.OnLostFocus(e);
             _caretTimer.Stop();
             _caretVisible = false;
+            if (_completionVisible) HideCompletion();
             Invalidate();
         }
 
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
+            PositionFindPanel();
             UpdateScrollBars();
             Invalidate();
         }
@@ -1649,6 +1825,922 @@ namespace CodeEditor
             }
 
             _diagnosticTooltip.Hide(this);
+        }
+
+        #endregion
+
+        #region Bracket Matching
+
+        private void UpdateBracketMatching()
+        {
+            _matchBracketA = null;
+            _matchBracketB = null;
+
+            if (_caret.Line >= _doc.LineCount) return;
+            string line = _doc.GetLine(_caret.Line);
+
+            char ch = '\0';
+            int col = _caret.Column;
+
+            if (col < line.Length && IsBracket(line[col]))
+            {
+                ch = line[col];
+            }
+            else if (col > 0 && col - 1 < line.Length && IsBracket(line[col - 1]))
+            {
+                ch = line[col - 1];
+                col = col - 1;
+            }
+
+            if (ch == '\0') return;
+
+            _matchBracketA = new TextPosition(_caret.Line, col);
+            var match = FindMatchingBracket(_caret.Line, col, ch);
+            if (match.HasValue)
+                _matchBracketB = match.Value;
+        }
+
+        private bool IsBracket(char c)
+        {
+            return c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}';
+        }
+
+        private bool IsOpenBracket(char c)
+        {
+            return c == '(' || c == '[' || c == '{';
+        }
+
+        private char GetMatchingBracket(char c)
+        {
+            switch (c)
+            {
+                case '(': return ')';
+                case ')': return '(';
+                case '[': return ']';
+                case ']': return '[';
+                case '{': return '}';
+                case '}': return '{';
+                default: return '\0';
+            }
+        }
+
+        private TextPosition? FindMatchingBracket(int line, int col, char bracket)
+        {
+            char target = GetMatchingBracket(bracket);
+            bool forward = IsOpenBracket(bracket);
+            int depth = 0;
+
+            if (forward)
+            {
+                for (int i = line; i < _doc.LineCount; i++)
+                {
+                    string l = _doc.GetLine(i);
+                    int startCol = (i == line) ? col : 0;
+                    for (int j = startCol; j < l.Length; j++)
+                    {
+                        if (l[j] == bracket) depth++;
+                        else if (l[j] == target) { depth--; if (depth == 0) return new TextPosition(i, j); }
+                    }
+                }
+            }
+            else
+            {
+                for (int i = line; i >= 0; i--)
+                {
+                    string l = _doc.GetLine(i);
+                    int startCol = (i == line) ? col : l.Length - 1;
+                    for (int j = startCol; j >= 0; j--)
+                    {
+                        if (l[j] == bracket) depth++;
+                        else if (l[j] == target) { depth--; if (depth == 0) return new TextPosition(i, j); }
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private void PaintBracketMatching(Graphics g)
+        {
+            if (!_matchBracketA.HasValue || !_matchBracketB.HasValue) return;
+
+            using (var brush = new SolidBrush(Color.FromArgb(60, 0, 150, 255)))
+            {
+                foreach (var pos in new[] { _matchBracketA.Value, _matchBracketB.Value })
+                {
+                    float x = _gutterWidth + TextLeftPadding + pos.Column * _charWidth - _scrollX;
+                    float y = (pos.Line - _scrollY) * _lineHeight;
+                    g.FillRectangle(brush, x, y, _charWidth, _lineHeight);
+                }
+            }
+
+            using (var pen = new Pen(Color.FromArgb(120, 0, 100, 200), 1f))
+            {
+                foreach (var pos in new[] { _matchBracketA.Value, _matchBracketB.Value })
+                {
+                    float x = _gutterWidth + TextLeftPadding + pos.Column * _charWidth - _scrollX;
+                    float y = (pos.Line - _scrollY) * _lineHeight;
+                    g.DrawRectangle(pen, x, y, _charWidth, _lineHeight);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Find and Replace
+
+        private void InitFindPanel()
+        {
+            _findPanel = new Panel();
+            _findPanel.Visible = false;
+            _findPanel.BackColor = Color.FromArgb(240, 240, 240);
+            _findPanel.Height = 34;
+            _findPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _findPanel.Paint += (s, e) => {
+                using (var pen = new Pen(Color.FromArgb(200, 200, 200)))
+                    e.Graphics.DrawRectangle(pen, 0, 0, _findPanel.Width - 1, _findPanel.Height - 1);
+            };
+
+            _findInput = new TextBox();
+            _findInput.Font = new Font("Segoe UI", 9f);
+            _findInput.Location = new Point(6, 6);
+            _findInput.Width = 180;
+            _findInput.Height = 22;
+            _findInput.TextChanged += (s, e) => UpdateFindHighlights();
+            _findInput.KeyDown += FindInput_KeyDown;
+
+            _replaceInput = new TextBox();
+            _replaceInput.Font = new Font("Segoe UI", 9f);
+            _replaceInput.Location = new Point(6, 32);
+            _replaceInput.Width = 180;
+            _replaceInput.Height = 22;
+            _replaceInput.Visible = false;
+            _replaceInput.KeyDown += FindInput_KeyDown;
+
+            _caseSensitiveChk = new CheckBox();
+            _caseSensitiveChk.Text = "Aa";
+            _caseSensitiveChk.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
+            _caseSensitiveChk.Location = new Point(190, 7);
+            _caseSensitiveChk.Size = new Size(38, 20);
+            _caseSensitiveChk.Appearance = Appearance.Button;
+            _caseSensitiveChk.FlatStyle = FlatStyle.Flat;
+            _caseSensitiveChk.CheckedChanged += (s, e) => UpdateFindHighlights();
+
+            _findCountLabel = new Label();
+            _findCountLabel.Font = new Font("Segoe UI", 8f);
+            _findCountLabel.Location = new Point(230, 9);
+            _findCountLabel.Size = new Size(60, 16);
+            _findCountLabel.ForeColor = Color.FromArgb(100, 100, 100);
+
+            _findPrevBtn = CreateFindButton("\u25B2", new Point(292, 5), (s, e) => FindPrevious());
+            _findNextBtn = CreateFindButton("\u25BC", new Point(316, 5), (s, e) => FindNext());
+            _replaceBtn = CreateFindButton("R", new Point(292, 31), (s, e) => ReplaceOne());
+            _replaceAllBtn = CreateFindButton("All", new Point(316, 31), (s, e) => ReplaceAll());
+            _replaceBtn.Visible = false;
+            _replaceAllBtn.Visible = false;
+
+            _findCloseBtn = CreateFindButton("\u2715", new Point(344, 5), (s, e) => HideFind());
+
+            _findPanel.Controls.AddRange(new Control[] {
+                _findInput, _replaceInput, _caseSensitiveChk, _findCountLabel,
+                _findPrevBtn, _findNextBtn, _replaceBtn, _replaceAllBtn, _findCloseBtn
+            });
+
+            Controls.Add(_findPanel);
+            PositionFindPanel();
+        }
+
+        private Button CreateFindButton(string text, Point location, EventHandler click)
+        {
+            var btn = new Button();
+            btn.Text = text;
+            btn.Font = new Font("Segoe UI", 8f);
+            btn.Location = location;
+            btn.Size = new Size(22, 22);
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.FlatAppearance.BorderSize = 1;
+            btn.Click += click;
+            return btn;
+        }
+
+        private void PositionFindPanel()
+        {
+            _findPanel.Width = 374;
+            _findPanel.Height = _replaceVisible ? 60 : 34;
+            _findPanel.Location = new Point(ClientSize.Width - _findPanel.Width - _vScrollBar.Width - 4, 2);
+        }
+
+        private void FindInput_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter && e.Shift)
+            { FindPrevious(); e.Handled = true; e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.Enter)
+            { FindNext(); e.Handled = true; e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.Escape)
+            { HideFind(); e.Handled = true; e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.F3 && e.Shift)
+            { FindPrevious(); e.Handled = true; e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.F3)
+            { FindNext(); e.Handled = true; e.SuppressKeyPress = true; }
+        }
+
+        public void ShowFind()
+        {
+            _findVisible = true;
+            _replaceVisible = false;
+            _replaceInput.Visible = false;
+            _replaceBtn.Visible = false;
+            _replaceAllBtn.Visible = false;
+            PositionFindPanel();
+            _findPanel.Visible = true;
+            _findPanel.BringToFront();
+
+            if (_hasSelection)
+            {
+                string sel = GetSelectedText();
+                if (!sel.Contains("\n")) _findInput.Text = sel;
+            }
+
+            _findInput.Focus();
+            _findInput.SelectAll();
+            UpdateFindHighlights();
+        }
+
+        public void ShowReplace()
+        {
+            _findVisible = true;
+            _replaceVisible = true;
+            _replaceInput.Visible = true;
+            _replaceBtn.Visible = true;
+            _replaceAllBtn.Visible = true;
+            PositionFindPanel();
+            _findPanel.Visible = true;
+            _findPanel.BringToFront();
+
+            if (_hasSelection)
+            {
+                string sel = GetSelectedText();
+                if (!sel.Contains("\n")) _findInput.Text = sel;
+            }
+
+            _findInput.Focus();
+            _findInput.SelectAll();
+            UpdateFindHighlights();
+        }
+
+        public void HideFind()
+        {
+            _findVisible = false;
+            _replaceVisible = false;
+            _findPanel.Visible = false;
+            _findMatches.Clear();
+            _currentMatchIndex = -1;
+            Focus();
+            Invalidate();
+        }
+
+        private void UpdateFindHighlights()
+        {
+            _findMatches.Clear();
+            _currentMatchIndex = -1;
+
+            string search = _findInput != null ? _findInput.Text : "";
+            if (string.IsNullOrEmpty(search))
+            {
+                if (_findCountLabel != null) _findCountLabel.Text = "";
+                Invalidate();
+                return;
+            }
+
+            string fullText = _doc.Text;
+            StringComparison comp = _caseSensitiveChk != null && _caseSensitiveChk.Checked
+                ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+            int idx = 0;
+            while ((idx = fullText.IndexOf(search, idx, comp)) >= 0)
+            {
+                int sLine, sCol, eLine, eCol;
+                OffsetToPosition(idx, out sLine, out sCol);
+                OffsetToPosition(idx + search.Length, out eLine, out eCol);
+                _findMatches.Add(new TextRange
+                {
+                    Start = new TextPosition(sLine, sCol),
+                    End = new TextPosition(eLine, eCol)
+                });
+                idx += Math.Max(1, search.Length);
+            }
+
+            if (_findMatches.Count > 0)
+            {
+                _currentMatchIndex = 0;
+                for (int i = 0; i < _findMatches.Count; i++)
+                {
+                    if (_findMatches[i].Start >= _caret) { _currentMatchIndex = i; break; }
+                }
+            }
+
+            if (_findCountLabel != null)
+                _findCountLabel.Text = _findMatches.Count > 0
+                    ? $"{_currentMatchIndex + 1}/{_findMatches.Count}" : "0";
+
+            Invalidate();
+        }
+
+        private void OffsetToPosition(int offset, out int line, out int col)
+        {
+            line = 0;
+            col = 0;
+            int pos = 0;
+            for (int i = 0; i < _doc.LineCount; i++)
+            {
+                int lineLen = _doc.GetLineLength(i);
+                if (pos + lineLen >= offset)
+                {
+                    line = i;
+                    col = offset - pos;
+                    return;
+                }
+                pos += lineLen + 1;
+            }
+            line = _doc.LineCount - 1;
+            col = _doc.GetLineLength(line);
+        }
+
+        public void FindNext()
+        {
+            if (_findMatches.Count == 0) return;
+            _currentMatchIndex = (_currentMatchIndex + 1) % _findMatches.Count;
+            GoToMatch();
+        }
+
+        public void FindPrevious()
+        {
+            if (_findMatches.Count == 0) return;
+            _currentMatchIndex = (_currentMatchIndex - 1 + _findMatches.Count) % _findMatches.Count;
+            GoToMatch();
+        }
+
+        private void GoToMatch()
+        {
+            if (_currentMatchIndex < 0 || _currentMatchIndex >= _findMatches.Count) return;
+            var match = _findMatches[_currentMatchIndex];
+            SetSelection(match.Start, match.End);
+            _caret = match.End;
+            EnsureCaretVisible();
+            ResetCaretBlink();
+            if (_findCountLabel != null)
+                _findCountLabel.Text = $"{_currentMatchIndex + 1}/{_findMatches.Count}";
+            Invalidate();
+        }
+
+        public void ReplaceOne()
+        {
+            if (_findMatches.Count == 0) return;
+            if (_currentMatchIndex < 0 || _currentMatchIndex >= _findMatches.Count) return;
+
+            var match = _findMatches[_currentMatchIndex];
+            _doc.Delete(match.Start, match.End);
+            var endPos = _doc.Insert(match.Start, _replaceInput.Text);
+            _caret = endPos;
+            ClearSelection();
+            UpdateFindHighlights();
+            FindNext();
+        }
+
+        public void ReplaceAll()
+        {
+            if (_findMatches.Count == 0) return;
+
+            _doc.BeginComposite(_caret);
+            for (int i = _findMatches.Count - 1; i >= 0; i--)
+            {
+                var match = _findMatches[i];
+                _doc.Delete(match.Start, match.End);
+                _doc.Insert(match.Start, _replaceInput.Text);
+            }
+            _doc.EndComposite(_caret);
+            UpdateFindHighlights();
+        }
+
+        private void PaintFindHighlights(Graphics g, int firstLine, int lastLine)
+        {
+            if (_findMatches.Count == 0) return;
+
+            for (int mi = 0; mi < _findMatches.Count; mi++)
+            {
+                var match = _findMatches[mi];
+                bool isCurrent = mi == _currentMatchIndex;
+                Color color = isCurrent ? Color.FromArgb(120, 255, 150, 50) : Color.FromArgb(80, 255, 235, 59);
+
+                using (var brush = new SolidBrush(color))
+                {
+                    for (int ln = Math.Max(match.Start.Line, firstLine); ln <= Math.Min(match.End.Line, lastLine); ln++)
+                    {
+                        float y = (ln - _scrollY) * _lineHeight;
+                        int startCol = (ln == match.Start.Line) ? match.Start.Column : 0;
+                        int endCol = (ln == match.End.Line) ? match.End.Column : _doc.GetLineLength(ln);
+                        float x1 = _gutterWidth + TextLeftPadding + startCol * _charWidth - _scrollX;
+                        float x2 = _gutterWidth + TextLeftPadding + endCol * _charWidth - _scrollX;
+                        g.FillRectangle(brush, x1, y, x2 - x1, _lineHeight);
+                    }
+                }
+            }
+        }
+
+        #endregion
+
+        #region Code Folding
+
+        private void RebuildFoldRegions()
+        {
+            if (_foldingProvider == null) { _foldRegions.Clear(); return; }
+            if (!_foldingDirty) return;
+            _foldingDirty = false;
+
+            var newRegions = _foldingProvider.GetFoldRegions(_doc.Text);
+            var oldCollapsed = new HashSet<int>();
+            foreach (var r in _foldRegions)
+            {
+                if (r.IsCollapsed) oldCollapsed.Add(r.StartLine);
+            }
+
+            _foldRegions = newRegions ?? new List<FoldRegion>();
+            foreach (var r in _foldRegions)
+            {
+                if (oldCollapsed.Contains(r.StartLine))
+                    r.IsCollapsed = true;
+            }
+
+            RebuildCollapsedLineMap();
+        }
+
+        private void RebuildCollapsedLineMap()
+        {
+            _collapsedLines.Clear();
+            foreach (var r in _foldRegions)
+            {
+                if (r.IsCollapsed)
+                {
+                    for (int i = r.StartLine + 1; i <= r.EndLine; i++)
+                        _collapsedLines[i] = true;
+                }
+            }
+        }
+
+        private bool IsLineVisible(int line)
+        {
+            return !_collapsedLines.ContainsKey(line);
+        }
+
+        private int GetVisibleLineCount()
+        {
+            int count = 0;
+            for (int i = 0; i < _doc.LineCount; i++)
+                if (IsLineVisible(i)) count++;
+            return count;
+        }
+
+        private int VisibleToActualLine(int visibleIndex)
+        {
+            int count = 0;
+            for (int i = 0; i < _doc.LineCount; i++)
+            {
+                if (IsLineVisible(i))
+                {
+                    if (count == visibleIndex) return i;
+                    count++;
+                }
+            }
+            return _doc.LineCount - 1;
+        }
+
+        private int ActualToVisibleLine(int actualLine)
+        {
+            int count = 0;
+            for (int i = 0; i < actualLine && i < _doc.LineCount; i++)
+                if (IsLineVisible(i)) count++;
+            return count;
+        }
+
+        private void ToggleFold(int line)
+        {
+            foreach (var r in _foldRegions)
+            {
+                if (r.StartLine == line)
+                {
+                    r.IsCollapsed = !r.IsCollapsed;
+                    RebuildCollapsedLineMap();
+                    UpdateScrollBars();
+                    Invalidate();
+                    return;
+                }
+            }
+        }
+
+        private FoldRegion GetFoldRegionForLine(int line)
+        {
+            foreach (var r in _foldRegions)
+                if (r.StartLine == line) return r;
+            return null;
+        }
+
+        private void PaintFoldMargin(Graphics g, int screenY, int actualLine)
+        {
+            if (_foldingProvider == null) return;
+
+            int foldX = _gutterWidth - FoldMarginWidth;
+            float y = screenY;
+
+            var region = GetFoldRegionForLine(actualLine);
+            if (region != null)
+            {
+                int cx = foldX + FoldMarginWidth / 2;
+                int cy = (int)(y + _lineHeight / 2);
+                int sz = 8;
+
+                using (var pen = new Pen(Color.FromArgb(120, 120, 120), 1f))
+                {
+                    g.DrawRectangle(pen, cx - sz / 2, cy - sz / 2, sz, sz);
+
+                    g.DrawLine(pen, cx - 2, cy, cx + 2, cy);
+                    if (region.IsCollapsed)
+                        g.DrawLine(pen, cx, cy - 2, cx, cy + 2);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Autocomplete
+
+        private void InitCompletionList()
+        {
+            _completionList = new ListBox();
+            _completionList.Visible = false;
+            _completionList.Font = new Font("Courier New", 10f);
+            _completionList.BorderStyle = BorderStyle.FixedSingle;
+            _completionList.IntegralHeight = false;
+            _completionList.Size = new Size(260, 140);
+            _completionList.DrawMode = DrawMode.OwnerDrawFixed;
+            _completionList.ItemHeight = 20;
+            _completionList.DrawItem += CompletionList_DrawItem;
+            _completionList.DoubleClick += (s, e) => AcceptCompletion();
+            _completionList.MouseDown += (s, e) => AcceptCompletion();
+            Controls.Add(_completionList);
+        }
+
+        private void CompletionList_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0 || e.Index >= _completionItems.Count) return;
+
+            e.DrawBackground();
+            var item = _completionItems[e.Index];
+
+            string kindText;
+            Color kindColor;
+            switch (item.Kind)
+            {
+                case CompletionItemKind.Keyword: kindText = "kw"; kindColor = Color.Blue; break;
+                case CompletionItemKind.Type: kindText = "T"; kindColor = Color.FromArgb(43, 145, 175); break;
+                case CompletionItemKind.Function: kindText = "fn"; kindColor = Color.FromArgb(116, 83, 31); break;
+                case CompletionItemKind.Variable: kindText = "v"; kindColor = Color.FromArgb(30, 30, 30); break;
+                case CompletionItemKind.Property: kindText = "p"; kindColor = Color.Purple; break;
+                default: kindText = "·"; kindColor = Color.Gray; break;
+            }
+
+            using (var kindBrush = new SolidBrush(kindColor))
+                e.Graphics.DrawString(kindText, e.Font, kindBrush, e.Bounds.X + 4, e.Bounds.Y + 2);
+
+            using (var textBrush = new SolidBrush(e.ForeColor))
+                e.Graphics.DrawString(item.Text, e.Font, textBrush, e.Bounds.X + 28, e.Bounds.Y + 2);
+
+            e.DrawFocusRectangle();
+        }
+
+        private void ShowCompletion()
+        {
+            if (_completionProvider == null) return;
+
+            string partial = GetPartialWord();
+            if (string.IsNullOrEmpty(partial) || partial.Length < 1)
+            {
+                HideCompletion();
+                return;
+            }
+
+            _completionPartial = partial;
+            _completionItems = _completionProvider.GetCompletions(_doc.Text, _caret, partial);
+
+            if (_completionItems.Count == 0)
+            {
+                HideCompletion();
+                return;
+            }
+
+            if (_completionItems.Count == 1 && _completionItems[0].Text == partial)
+            {
+                HideCompletion();
+                return;
+            }
+
+            _completionList.Items.Clear();
+            foreach (var item in _completionItems)
+                _completionList.Items.Add(item.Text);
+
+            float cx = _gutterWidth + TextLeftPadding + (_caret.Column - partial.Length) * _charWidth - _scrollX;
+            float cy = (_caret.Line - _scrollY + 1) * _lineHeight;
+
+            if (cy + _completionList.Height > ClientSize.Height - _hScrollBar.Height)
+                cy = (_caret.Line - _scrollY) * _lineHeight - _completionList.Height;
+
+            _completionList.Location = new Point((int)cx, (int)cy);
+            _completionList.SelectedIndex = 0;
+            _completionList.Visible = true;
+            _completionVisible = true;
+            _completionList.BringToFront();
+        }
+
+        private void HideCompletion()
+        {
+            _completionVisible = false;
+            _completionList.Visible = false;
+            _completionItems.Clear();
+        }
+
+        private void AcceptCompletion()
+        {
+            if (!_completionVisible || _completionList.SelectedIndex < 0) return;
+            if (_completionList.SelectedIndex >= _completionItems.Count) return;
+
+            string selected = _completionItems[_completionList.SelectedIndex].Text;
+            string partial = _completionPartial;
+
+            var deleteStart = new TextPosition(_caret.Line, _caret.Column - partial.Length);
+            _doc.Delete(deleteStart, _caret);
+            var endPos = _doc.Insert(deleteStart, selected);
+            _caret = endPos;
+            ClearSelection();
+            HideCompletion();
+            EnsureCaretVisible();
+            Invalidate();
+        }
+
+        private string GetPartialWord()
+        {
+            if (_caret.Line >= _doc.LineCount) return "";
+            string line = _doc.GetLine(_caret.Line);
+            int col = _caret.Column;
+            int start = col;
+            while (start > 0 && IsWordChar(line[start - 1]))
+                start--;
+            if (start == col) return "";
+            return line.Substring(start, col - start);
+        }
+
+        private void UpdateCompletionFilter()
+        {
+            if (!_completionVisible) return;
+
+            string partial = GetPartialWord();
+            if (string.IsNullOrEmpty(partial))
+            {
+                HideCompletion();
+                return;
+            }
+
+            _completionPartial = partial;
+            _completionItems = _completionProvider.GetCompletions(_doc.Text, _caret, partial);
+
+            if (_completionItems.Count == 0)
+            {
+                HideCompletion();
+                return;
+            }
+
+            _completionList.Items.Clear();
+            foreach (var item in _completionItems)
+                _completionList.Items.Add(item.Text);
+            _completionList.SelectedIndex = 0;
+        }
+
+        #endregion
+
+        #region Multi-Cursor
+
+        private void AddCursorAtPosition(TextPosition pos)
+        {
+            foreach (var c in _carets)
+                if (c == pos) return;
+
+            _carets.Add(pos);
+            _selectionAnchors.Add(pos);
+            _hasSelections.Add(false);
+            Invalidate();
+        }
+
+        private void ClearExtraCursors()
+        {
+            _carets.Clear();
+            _selectionAnchors.Clear();
+            _hasSelections.Clear();
+            Invalidate();
+        }
+
+        private bool HasMultipleCursors => _carets.Count > 0;
+
+        private void SelectNextOccurrence()
+        {
+            string word;
+            if (_hasSelection)
+            {
+                word = GetSelectedText();
+            }
+            else
+            {
+                word = GetWordAtCaret();
+                if (string.IsNullOrEmpty(word)) return;
+                int wordStart = _caret.Column;
+                string line = _doc.GetLine(_caret.Line);
+                while (wordStart > 0 && IsWordChar(line[wordStart - 1])) wordStart--;
+                int wordEnd = wordStart + word.Length;
+                SetSelection(new TextPosition(_caret.Line, wordStart), new TextPosition(_caret.Line, wordEnd));
+                _caret = new TextPosition(_caret.Line, wordEnd);
+                Invalidate();
+                return;
+            }
+
+            if (string.IsNullOrEmpty(word)) return;
+
+            TextPosition searchFrom = _caret;
+            if (_carets.Count > 0)
+            {
+                searchFrom = _carets[_carets.Count - 1];
+            }
+
+            string fullText = _doc.Text;
+            int offset = 0;
+            for (int i = 0; i < searchFrom.Line; i++)
+                offset += _doc.GetLineLength(i) + 1;
+            offset += searchFrom.Column;
+
+            int idx = fullText.IndexOf(word, offset, StringComparison.Ordinal);
+            if (idx < 0)
+                idx = fullText.IndexOf(word, 0, StringComparison.Ordinal);
+
+            if (idx >= 0)
+            {
+                int sLine, sCol;
+                OffsetToPosition(idx, out sLine, out sCol);
+                int eLine, eCol;
+                OffsetToPosition(idx + word.Length, out eLine, out eCol);
+
+                var newPos = new TextPosition(eLine, eCol);
+                bool alreadyExists = (newPos == _caret);
+                foreach (var c in _carets)
+                    if (c == newPos) { alreadyExists = true; break; }
+
+                if (!alreadyExists)
+                {
+                    _carets.Add(newPos);
+                    _selectionAnchors.Add(new TextPosition(sLine, sCol));
+                    _hasSelections.Add(true);
+                    EnsurePositionVisible(newPos);
+                    Invalidate();
+                }
+            }
+        }
+
+        private string GetWordAtCaret()
+        {
+            if (_caret.Line >= _doc.LineCount) return "";
+            string line = _doc.GetLine(_caret.Line);
+            int col = _caret.Column;
+
+            int start = col;
+            while (start > 0 && IsWordChar(line[start - 1])) start--;
+            int end = col;
+            while (end < line.Length && IsWordChar(line[end])) end++;
+
+            if (start == end) return "";
+            return line.Substring(start, end - start);
+        }
+
+        private void EnsurePositionVisible(TextPosition pos)
+        {
+            int visibleLines = Math.Max(1, (int)(TextAreaHeight / _lineHeight));
+            if (pos.Line < _scrollY)
+                _scrollY = pos.Line;
+            else if (pos.Line >= _scrollY + visibleLines)
+                _scrollY = pos.Line - visibleLines + 1;
+            UpdateScrollBars();
+        }
+
+        private void InsertAtAllCursors(char c)
+        {
+            if (_carets.Count == 0) return;
+
+            _doc.BeginComposite(_caret);
+
+            var sorted = new List<int>();
+            for (int i = 0; i < _carets.Count; i++) sorted.Add(i);
+            sorted.Sort((a, b) => {
+                int cmp = _carets[b].Line.CompareTo(_carets[a].Line);
+                return cmp != 0 ? cmp : _carets[b].Column.CompareTo(_carets[a].Column);
+            });
+
+            foreach (int idx in sorted)
+            {
+                if (_hasSelections[idx])
+                {
+                    var range = _selectionAnchors[idx] < _carets[idx]
+                        ? new TextRange { Start = _selectionAnchors[idx], End = _carets[idx] }
+                        : new TextRange { Start = _carets[idx], End = _selectionAnchors[idx] };
+                    _doc.Delete(range.Start, range.End);
+                    _carets[idx] = range.Start;
+                    _hasSelections[idx] = false;
+                }
+
+                string s = c.ToString();
+                var endPos = _doc.Insert(_carets[idx], s);
+                _carets[idx] = endPos;
+                _selectionAnchors[idx] = endPos;
+            }
+
+            _doc.EndComposite(_caret);
+            Invalidate();
+        }
+
+        private void DeleteAtAllCursors()
+        {
+            if (_carets.Count == 0) return;
+
+            _doc.BeginComposite(_caret);
+
+            var sorted = new List<int>();
+            for (int i = 0; i < _carets.Count; i++) sorted.Add(i);
+            sorted.Sort((a, b) => {
+                int cmp = _carets[b].Line.CompareTo(_carets[a].Line);
+                return cmp != 0 ? cmp : _carets[b].Column.CompareTo(_carets[a].Column);
+            });
+
+            foreach (int idx in sorted)
+            {
+                var pos = _carets[idx];
+                if (pos.Column > 0)
+                {
+                    var delStart = new TextPosition(pos.Line, pos.Column - 1);
+                    _doc.Delete(delStart, pos);
+                    _carets[idx] = delStart;
+                    _selectionAnchors[idx] = delStart;
+                }
+                else if (pos.Line > 0)
+                {
+                    int prevLen = _doc.GetLineLength(pos.Line - 1);
+                    var delStart = new TextPosition(pos.Line - 1, prevLen);
+                    _doc.Delete(delStart, pos);
+                    _carets[idx] = delStart;
+                    _selectionAnchors[idx] = delStart;
+                }
+            }
+
+            _doc.EndComposite(_caret);
+            Invalidate();
+        }
+
+        private void PaintExtraCursors(Graphics g)
+        {
+            if (_carets.Count == 0) return;
+
+            for (int i = 0; i < _carets.Count; i++)
+            {
+                if (_hasSelections[i])
+                {
+                    var range = _selectionAnchors[i] < _carets[i]
+                        ? new TextRange { Start = _selectionAnchors[i], End = _carets[i] }
+                        : new TextRange { Start = _carets[i], End = _selectionAnchors[i] };
+
+                    using (var brush = new SolidBrush(_ruleset.SelectionColor))
+                    {
+                        for (int ln = range.Start.Line; ln <= range.End.Line; ln++)
+                        {
+                            float y = (ln - _scrollY) * _lineHeight;
+                            int startCol = (ln == range.Start.Line) ? range.Start.Column : 0;
+                            int endCol = (ln == range.End.Line) ? range.End.Column : _doc.GetLineLength(ln);
+                            float x1 = _gutterWidth + TextLeftPadding + startCol * _charWidth - _scrollX;
+                            float x2 = _gutterWidth + TextLeftPadding + endCol * _charWidth - _scrollX;
+                            g.FillRectangle(brush, x1, y, x2 - x1, _lineHeight);
+                        }
+                    }
+                }
+
+                if (_caretVisible)
+                {
+                    float cx = _gutterWidth + TextLeftPadding + _carets[i].Column * _charWidth - _scrollX;
+                    float cy = (_carets[i].Line - _scrollY) * _lineHeight;
+                    using (var pen = new Pen(_ruleset.CaretColor, 2f))
+                        g.DrawLine(pen, cx, cy, cx, cy + _lineHeight);
+                }
+            }
         }
 
         #endregion

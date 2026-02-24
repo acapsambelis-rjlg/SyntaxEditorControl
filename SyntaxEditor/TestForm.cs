@@ -65,6 +65,16 @@ namespace CodeEditor
             _codeTextBox.DeleteLine();
         }
 
+        private void EditFindMenuItem_Click(object sender, EventArgs e)
+        {
+            _codeTextBox.ShowFind();
+        }
+
+        private void EditReplaceMenuItem_Click(object sender, EventArgs e)
+        {
+            _codeTextBox.ShowReplace();
+        }
+
         private void ViewLineNumbersMenuItem_Click(object sender, EventArgs e)
         {
             _codeTextBox.ShowLineNumbers = _viewLineNumbersMenuItem.Checked;
@@ -92,21 +102,29 @@ namespace CodeEditor
                 case 0:
                     _codeTextBox.Ruleset = SyntaxRuleset.CreateCSharpRuleset();
                     _codeTextBox.DiagnosticProvider = new CSharpDiagnosticProvider();
+                    _codeTextBox.CompletionProvider = new CSharpCompletionProvider();
+                    _codeTextBox.FoldingProvider = new BraceFoldingProvider();
                     _codeTextBox.Text = GetSampleCSharpCode();
                     break;
                 case 1:
                     _codeTextBox.Ruleset = SyntaxRuleset.CreatePythonRuleset();
                     _codeTextBox.DiagnosticProvider = new PythonDiagnosticProvider();
+                    _codeTextBox.CompletionProvider = new PythonCompletionProvider();
+                    _codeTextBox.FoldingProvider = new IndentFoldingProvider();
                     _codeTextBox.Text = GetSamplePythonCode();
                     break;
                 case 2:
                     _codeTextBox.Ruleset = SyntaxRuleset.CreateJavaScriptRuleset();
                     _codeTextBox.DiagnosticProvider = new JavaScriptDiagnosticProvider();
+                    _codeTextBox.CompletionProvider = new JavaScriptCompletionProvider();
+                    _codeTextBox.FoldingProvider = new BraceFoldingProvider();
                     _codeTextBox.Text = GetSampleJavaScriptCode();
                     break;
                 case 3:
                     _codeTextBox.Ruleset = SyntaxRuleset.CreatePlainTextRuleset();
                     _codeTextBox.DiagnosticProvider = null;
+                    _codeTextBox.CompletionProvider = null;
+                    _codeTextBox.FoldingProvider = null;
                     _codeTextBox.Text = "Hello, World!\n\nThis is plain text mode with no syntax highlighting.\nYou can still use all the editing features:\n- Undo/Redo\n- Line duplication\n- Selection and drag\n- Auto-indent\n- And more!";
                     break;
             }

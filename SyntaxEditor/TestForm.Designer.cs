@@ -25,6 +25,8 @@ namespace CodeEditor
         private System.Windows.Forms.ToolStripMenuItem _editSelectAllMenuItem;
         private System.Windows.Forms.ToolStripMenuItem _editDuplicateLineMenuItem;
         private System.Windows.Forms.ToolStripMenuItem _editDeleteLineMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem _editFindMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem _editReplaceMenuItem;
 
         private System.Windows.Forms.ToolStripMenuItem _viewMenu;
         private System.Windows.Forms.ToolStripMenuItem _viewLineNumbersMenuItem;
@@ -57,6 +59,8 @@ namespace CodeEditor
             this._editSelectAllMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this._editDuplicateLineMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this._editDeleteLineMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this._editFindMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this._editReplaceMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this._viewMenu = new System.Windows.Forms.ToolStripMenuItem();
             this._viewLineNumbersMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this._viewHighlightCurrentLineMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -120,7 +124,10 @@ namespace CodeEditor
                 new System.Windows.Forms.ToolStripSeparator(),
                 this._editSelectAllMenuItem,
                 this._editDuplicateLineMenuItem,
-                this._editDeleteLineMenuItem
+                this._editDeleteLineMenuItem,
+                new System.Windows.Forms.ToolStripSeparator(),
+                this._editFindMenuItem,
+                this._editReplaceMenuItem
             });
 
             //
@@ -170,6 +177,18 @@ namespace CodeEditor
             //
             this._editDeleteLineMenuItem.Text = "Delete Line (Ctrl+Shift+L)";
             this._editDeleteLineMenuItem.Click += new System.EventHandler(this.EditDeleteLineMenuItem_Click);
+
+            //
+            // _editFindMenuItem
+            //
+            this._editFindMenuItem.Text = "Find (Ctrl+F)";
+            this._editFindMenuItem.Click += new System.EventHandler(this.EditFindMenuItem_Click);
+
+            //
+            // _editReplaceMenuItem
+            //
+            this._editReplaceMenuItem.Text = "Replace (Ctrl+H)";
+            this._editReplaceMenuItem.Click += new System.EventHandler(this.EditReplaceMenuItem_Click);
 
             //
             // _viewMenu
@@ -238,7 +257,7 @@ namespace CodeEditor
             //
             // _helpLabel
             //
-            this._helpLabel.Text = "Shortcuts: Ctrl+D Duplicate | Ctrl+Shift+L Delete Line | Ctrl+Z/Y Undo/Redo | Tab/Shift+Tab Indent | Ctrl+U Case";
+            this._helpLabel.Text = "Ctrl+F Find | Ctrl+H Replace | Ctrl+Space Autocomplete | Ctrl+D Select Next | Ctrl+Click Multi-cursor";
             this._helpLabel.ForeColor = System.Drawing.Color.FromArgb(100, 100, 100);
             this._helpLabel.AutoSize = true;
             this._helpLabel.Location = new System.Drawing.Point(260, 9);

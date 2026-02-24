@@ -20,6 +20,8 @@ SyntaxEditor/
   TextDocument.cs                      - Document model with undo/redo stack (TextPosition, TextRange, UndoAction)
   Diagnostic.cs                        - Diagnostic, DiagnosticSeverity, IDiagnosticProvider, DiagnosticsChangedEventArgs
   DiagnosticProviders.cs               - Example providers: CSharpDiagnosticProvider, PythonDiagnosticProvider, JavaScriptDiagnosticProvider
+  CompletionProvider.cs                - ICompletionProvider, CompletionItem, CompletionItemKind + C#/Python/JS providers
+  FoldingProvider.cs                   - IFoldingProvider, FoldRegion, BraceFoldingProvider, IndentFoldingProvider
   CodeTextBox.cs                       - Main custom Control (CodeTextBox) - rendering and input handling
   CodeTextBox.Designer.cs              - Designer-generated component initialization (scrollbars, timer)
   CodeTextBox.resx                     - CodeTextBox embedded resources
@@ -51,6 +53,11 @@ build.sh                               - Mono build script (for Replit environme
 - Go To Line dialog
 - Line numbers, current line highlight, scrollbars (gutter clips text area)
 - Built-in rulesets: C#, Python, JavaScript, Plain Text
+- **Find & Replace** panel (Ctrl+F / Ctrl+H) with match highlighting
+- **Autocomplete** popup with ICompletionProvider (Ctrl+Space, auto-trigger on typing)
+- **Bracket matching** highlight for `()`, `[]`, `{}`
+- **Code folding** with IFoldingProvider (brace-based and indent-based)
+- **Multi-cursor editing** (Ctrl+Click, Ctrl+D select next occurrence)
 
 ## Diagnostics System
 - **IDiagnosticProvider** interface: implement `List<Diagnostic> Analyze(string text)` to provide diagnostics
@@ -62,6 +69,52 @@ build.sh                               - Mono build script (for Replit environme
 - **CodeTextBox.DiagnosticsChanged** event: fires when diagnostics update
 - **Built-in providers**: CSharpDiagnosticProvider, PythonDiagnosticProvider, JavaScriptDiagnosticProvider
   - Bracket/brace matching, missing semicolons/colons, empty catch blocks, unused variables, style warnings
+
+## Find & Replace
+- **Ctrl+F**: Opens find panel (overlay at top-right of editor)
+- **Ctrl+H**: Opens find & replace panel
+- All matches highlighted in yellow, current match in orange
+- Case-sensitive toggle button
+- F3 / Shift+F3: Navigate between matches
+- Enter: Find next, Shift+Enter: Find previous
+- Replace one / Replace all buttons
+- Escape closes panel
+- Match count displayed in panel
+
+## Autocomplete / Intellisense
+- **ICompletionProvider** interface: `List<CompletionItem> GetCompletions(string text, TextPosition caret, string partialWord)`
+- **CompletionItem**: Text, Kind (Keyword/Type/Function/Variable/Property/Snippet/Constant/Module), Description
+- **CompletionItemKind** enum drives icon/color in popup
+- **CodeTextBox.CompletionProvider** property: set to enable autocomplete
+- Ctrl+Space: Force open completion popup
+- Auto-triggers on typing identifiers or `.`
+- Arrow keys navigate, Enter/Tab accept, Escape dismiss
+- Filters as you type
+- **Built-in providers**: CSharpCompletionProvider, PythonCompletionProvider, JavaScriptCompletionProvider
+
+## Code Folding
+- **IFoldingProvider** interface: `List<FoldRegion> GetFoldRegions(string text)`
+- **FoldRegion**: StartLine, EndLine, IsCollapsed
+- **CodeTextBox.FoldingProvider** property: set to enable folding
+- Fold margin with +/- toggle boxes in gutter
+- Click fold margin to collapse/expand regions
+- Collapsed lines are hidden from rendering
+- Collapse state preserved across text edits
+- **Built-in providers**: BraceFoldingProvider (C#/JS), IndentFoldingProvider (Python)
+
+## Multi-Cursor Editing
+- **Ctrl+Click**: Add cursor at clicked position
+- **Ctrl+D**: Select next occurrence of current word/selection
+- All cursors type, delete, and operate simultaneously
+- Extra cursors rendered with carets and selections
+- **Escape**: Clear all extra cursors, return to single cursor
+- Primary caret (`_caret`) remains separate; extra cursors in `_carets` list
+
+## Bracket Matching
+- Highlights matching bracket pair when caret is adjacent to `()`, `[]`, `{}`
+- Light blue background highlight on both brackets
+- Scans forward for open brackets, backward for close brackets
+- Updates on every caret move (keyboard, mouse)
 
 ## Cross-File Analysis Infrastructure (for multi-file editors)
 - **SymbolInfo**: represents an exported symbol (name, kind, return type, parameters, visibility, metadata)
@@ -75,14 +128,19 @@ build.sh                               - Mono build script (for Replit environme
 
 ## Keyboard Shortcuts
 - Ctrl+Z: Undo | Ctrl+Y / Ctrl+Shift+Z: Redo
-- Ctrl+D: Duplicate line/selection
+- Ctrl+D: Select next occurrence (multi-cursor)
 - Ctrl+Shift+L: Delete line
 - Ctrl+C/X/V: Copy/Cut/Paste (copies whole line if no selection)
 - Ctrl+A: Select All
 - Ctrl+U: Lowercase | Ctrl+Shift+U: Uppercase
-- Tab/Shift+Tab: Indent/Outdent
+- Ctrl+F: Find | Ctrl+H: Find & Replace
+- F3 / Shift+F3: Find next / previous
+- Ctrl+Space: Open autocomplete
+- Ctrl+Click: Add cursor
+- Tab/Shift+Tab: Indent/Outdent (or accept completion)
 - Ctrl+[/]: Indent/Outdent selection
 - Home: Smart home (first non-whitespace / column 0)
 - Ctrl+Home/End: Document start/end
 - Ctrl+Scroll: Zoom in/out
 - Shift+Scroll: Horizontal scroll
+- Escape: Close find panel / clear extra cursors / dismiss completion
