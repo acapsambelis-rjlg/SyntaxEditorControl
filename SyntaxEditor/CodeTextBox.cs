@@ -420,6 +420,135 @@ namespace CodeEditor
 
         #endregion
 
+        #region Public Selection and Caret API
+
+        public bool HasSelection => _hasSelection;
+
+        public string SelectedText => GetSelectedText();
+
+        public int SelectionLength
+        {
+            get
+            {
+                if (!_hasSelection) return 0;
+                var range = GetSelectionRange();
+                string text = _doc.GetText(range.Start, range.End);
+                return text.Length;
+            }
+        }
+
+        public void SetSelectionRange(TextPosition anchor, TextPosition caret)
+        {
+            SetSelection(anchor, caret);
+            _caret = caret;
+            _desiredColumn = -1;
+            EnsureCaretVisible();
+            ResetCaretBlink();
+            Invalidate();
+        }
+
+        public void ClearSelectionRange()
+        {
+            ClearSelection();
+            Invalidate();
+        }
+
+        public void InsertTextAtCaret(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            if (_hasSelection) DeleteSelection();
+            text = text.Replace("\r\n", "\n").Replace("\r", "\n");
+            _caret = _doc.Insert(_caret, text);
+            ClearSelection();
+            _desiredColumn = -1;
+            EnsureCaretVisible();
+            ResetCaretBlink();
+        }
+
+        public void DeleteSelectionText()
+        {
+            if (!_hasSelection) return;
+            DeleteSelection();
+            _desiredColumn = -1;
+            EnsureCaretVisible();
+            ResetCaretBlink();
+        }
+
+        public int GetAbsoluteCaretPosition()
+        {
+            int offset = 0;
+            for (int i = 0; i < _caret.Line; i++)
+                offset += _doc.GetLineLength(i) + 1;
+            offset += _caret.Column;
+            return offset;
+        }
+
+        public void SetAbsoluteCaretPosition(int offset)
+        {
+            int line, col;
+            OffsetToPosition(offset, out line, out col);
+            _caret = new TextPosition(line, col);
+            ClearSelection();
+            _desiredColumn = -1;
+            EnsureCaretVisible();
+            ResetCaretBlink();
+            Invalidate();
+        }
+
+        public int GetLineFromCharIndex(int charIndex)
+        {
+            int line, col;
+            OffsetToPosition(charIndex, out line, out col);
+            return line;
+        }
+
+        public int GetFirstCharIndexFromLine(int lineIndex)
+        {
+            if (lineIndex < 0) return 0;
+            if (lineIndex >= _doc.LineCount) lineIndex = _doc.LineCount - 1;
+            int offset = 0;
+            for (int i = 0; i < lineIndex; i++)
+                offset += _doc.GetLineLength(i) + 1;
+            return offset;
+        }
+
+        public Point GetPositionFromCharIndex(int charIndex)
+        {
+            int line, col;
+            OffsetToPosition(charIndex, out line, out col);
+            float x = _gutterWidth + TextLeftPadding + col * _charWidth - _scrollX;
+            float y = ScreenYForLine(line);
+            return new Point((int)x, (int)(y + _lineHeight));
+        }
+
+        public void SetCaretPosition(TextPosition pos)
+        {
+            _caret = _doc.ClampPosition(pos);
+            ClearSelection();
+            _desiredColumn = -1;
+            EnsureCaretVisible();
+            ResetCaretBlink();
+            Invalidate();
+        }
+
+        public void SelectRange(int absoluteStart, int length)
+        {
+            int startLine, startCol;
+            OffsetToPosition(absoluteStart, out startLine, out startCol);
+            int endLine, endCol;
+            OffsetToPosition(absoluteStart + length, out endLine, out endCol);
+            var anchor = new TextPosition(startLine, startCol);
+            var caret = new TextPosition(endLine, endCol);
+            SetSelection(anchor, caret);
+            _caret = caret;
+            _desiredColumn = -1;
+            EnsureCaretVisible();
+            ResetCaretBlink();
+            Invalidate();
+        }
+
+        #endregion
+
         #region Designer Event Handlers
 
         private void VScrollBar_ValueChanged(object sender, EventArgs e)
@@ -983,9 +1112,12 @@ namespace CodeEditor
 
                     AddSpan(new MultiLineSpan
                     {
-                        StartLine = sLine, StartCol = sCol,
-                        EndLine = eLine, EndCol = eCol,
-                        ForeColor = rule.ForeColor, Style = rule.FontStyle,
+                        StartLine = sLine,
+                        StartCol = sCol,
+                        EndLine = eLine,
+                        EndCol = eCol,
+                        ForeColor = rule.ForeColor,
+                        Style = rule.FontStyle,
                         IsExclude = false
                     });
 
@@ -1003,9 +1135,12 @@ namespace CodeEditor
 
                             AddSpan(new MultiLineSpan
                             {
-                                StartLine = exSLine, StartCol = exSCol,
-                                EndLine = exELine, EndCol = exECol,
-                                ForeColor = _ruleset.DefaultForeColor, Style = FontStyle.Regular,
+                                StartLine = exSLine,
+                                StartCol = exSCol,
+                                EndLine = exELine,
+                                EndCol = exECol,
+                                ForeColor = _ruleset.DefaultForeColor,
+                                Style = FontStyle.Regular,
                                 IsExclude = true
                             });
                         }
@@ -1471,7 +1606,7 @@ namespace CodeEditor
                 }
             }
 
-            if (c == '(' ) closing = ")";
+            if (c == '(') closing = ")";
             else if (c == '[') closing = "]";
             else if (c == '{') closing = "}";
             else if (c == '"' || c == '\'')
