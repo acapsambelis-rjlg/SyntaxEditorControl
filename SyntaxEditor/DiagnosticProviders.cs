@@ -28,12 +28,18 @@ namespace CodeEditor
 
                 CheckSemicolonMissing(lines, i, line, trimmed, diagnostics);
                 CheckEmptyCatchBlock(lines, i, trimmed, diagnostics);
+                CheckEmptyBlock(lines, i, trimmed, diagnostics);
                 CheckUnusedVariable(lines, i, line, text, diagnostics);
                 CheckConsoleWriteLineArgs(lines, i, line, diagnostics);
                 CheckComparisonInsteadOfAssignment(lines, i, line, trimmed, diagnostics);
                 CheckThisQualifier(lines, i, line, diagnostics);
                 CheckStringTypeName(lines, i, line, trimmed, diagnostics);
+                CheckCommonTypos(lines, i, line, diagnostics);
             }
+
+            CheckUnterminatedStrings(lines, diagnostics);
+            CheckDuplicateDeclarations(lines, diagnostics);
+            CheckUnreachableCode(lines, diagnostics);
 
             return diagnostics;
         }
@@ -151,6 +157,182 @@ namespace CodeEditor
             }
         }
 
+        private void CheckEmptyBlock(string[] lines, int i, string trimmed, List<Diagnostic> diagnostics)
+        {
+            if (trimmed.StartsWith("catch")) return;
+            var match = Regex.Match(trimmed, @"^(if|else if|else|for|foreach|while|switch)\b");
+            if (!match.Success) return;
+
+            for (int j = i + 1; j < lines.Length; j++)
+            {
+                string next = lines[j].Trim();
+                if (next == "{") continue;
+                if (next == "}")
+                {
+                    int col = lines[i].IndexOf(match.Groups[1].Value);
+                    diagnostics.Add(new Diagnostic(i, col, match.Groups[1].Length,
+                        $"Empty '{match.Groups[1].Value}' block", DiagnosticSeverity.Warning));
+                }
+                break;
+            }
+        }
+
+        private void CheckCommonTypos(string[] lines, int i, string line, List<Diagnostic> diagnostics)
+        {
+            var typos = new Dictionary<string, string>
+            {
+                { @"\bConsle\b", "Console" }, { @"\bConsoel\b", "Console" },
+                { @"\bWritLine\b", "WriteLine" }, { @"\bWriteLien\b", "WriteLine" },
+                { @"\bReadLien\b", "ReadLine" },
+                { @"\bStirng\b", "String" }, { @"\bStrign\b", "String" },
+                { @"\bLsit\b", "List" }, { @"\bDictinoary\b", "Dictionary" },
+                { @"\bDicitonary\b", "Dictionary" },
+                { @"\bLenght\b", "Length" }, { @"\bLegnth\b", "Length" },
+                { @"\bCoutn\b", "Count" },
+                { @"\bTostirng\b", "ToString" }, { @"\bToStirng\b", "ToString" },
+                { @"\bNamepsace\b", "Namespace" },
+                { @"\bretrun\b", "return" }, { @"\breture\b", "return" },
+            };
+
+            foreach (var kv in typos)
+            {
+                var m = Regex.Match(line, kv.Key);
+                if (m.Success)
+                {
+                    diagnostics.Add(new Diagnostic(i, m.Index, m.Length,
+                        $"Did you mean '{kv.Value}'?", DiagnosticSeverity.Error));
+                }
+            }
+        }
+
+        private void CheckUnterminatedStrings(string[] lines, List<Diagnostic> diagnostics)
+        {
+            bool inBlockComment = false;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                string trimmed = line.TrimStart();
+
+                for (int j = 0; j < line.Length - 1; j++)
+                {
+                    if (!inBlockComment && line[j] == '/' && line[j + 1] == '*') { inBlockComment = true; j++; continue; }
+                    if (inBlockComment && line[j] == '*' && line[j + 1] == '/') { inBlockComment = false; j++; continue; }
+                }
+                if (inBlockComment) continue;
+                if (trimmed.StartsWith("//")) continue;
+
+                bool inStr = false;
+                bool isVerbatim = false;
+                char strCh = '"';
+                for (int j = 0; j < line.Length; j++)
+                {
+                    char c = line[j];
+                    if (inStr)
+                    {
+                        if (isVerbatim)
+                        {
+                            if (c == '"' && j + 1 < line.Length && line[j + 1] == '"') { j++; continue; }
+                            if (c == '"') { inStr = false; continue; }
+                        }
+                        else
+                        {
+                            if (c == '\\' && j + 1 < line.Length) { j++; continue; }
+                            if (c == strCh) { inStr = false; continue; }
+                        }
+                        continue;
+                    }
+                    if (c == '/' && j + 1 < line.Length && line[j + 1] == '/') break;
+                    if (c == '@' && j + 1 < line.Length && line[j + 1] == '"') { inStr = true; isVerbatim = true; strCh = '"'; j++; continue; }
+                    if (c == '$' && j + 1 < line.Length && line[j + 1] == '"') { inStr = true; isVerbatim = false; strCh = '"'; j++; continue; }
+                    if (c == '"' || c == '\'') { inStr = true; isVerbatim = false; strCh = c; continue; }
+                }
+                if (inStr && !isVerbatim)
+                {
+                    diagnostics.Add(new Diagnostic(i, line.Length - 1, 1,
+                        "Unterminated string literal", DiagnosticSeverity.Error));
+                }
+            }
+        }
+
+        private void CheckDuplicateDeclarations(string[] lines, List<Diagnostic> diagnostics)
+        {
+            var seen = new Dictionary<string, int>();
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string trimmed = lines[i].TrimStart();
+                if (IsInsideBlockComment(lines, i)) continue;
+                if (trimmed.StartsWith("//")) continue;
+
+                var methodMatch = Regex.Match(trimmed, @"^(?:public|private|protected|internal|static|\s)*\s+(?:void|int|string|bool|double|float|Task|async\s+Task)\s+(\w+)\s*\(");
+                if (methodMatch.Success)
+                {
+                    string name = methodMatch.Groups[1].Value;
+                    string key = "method:" + name;
+                    if (seen.ContainsKey(key))
+                    {
+                        int col = lines[i].IndexOf(name);
+                        diagnostics.Add(new Diagnostic(i, col, name.Length,
+                            $"Method '{name}' is already declared on line {seen[key] + 1} (if not an overload, this is a duplicate)", DiagnosticSeverity.Info));
+                    }
+                    else
+                    {
+                        seen[key] = i;
+                    }
+                }
+
+                var varMatch = Regex.Match(trimmed, @"^(?:var|int|string|bool|double|float|char|long|byte|short|decimal|object|dynamic)\s+(\w+)\s*[=;]");
+                if (varMatch.Success)
+                {
+                    string name = varMatch.Groups[1].Value;
+                    int indent = lines[i].Length - trimmed.Length;
+                    string key = "var:" + name + ":" + indent;
+                    if (seen.ContainsKey(key))
+                    {
+                        int col = lines[i].IndexOf(name, lines[i].Length - trimmed.Length);
+                        diagnostics.Add(new Diagnostic(i, col, name.Length,
+                            $"Variable '{name}' is already declared on line {seen[key] + 1}", DiagnosticSeverity.Warning));
+                    }
+                    else
+                    {
+                        seen[key] = i;
+                    }
+                }
+            }
+        }
+
+        private void CheckUnreachableCode(string[] lines, List<Diagnostic> diagnostics)
+        {
+            for (int i = 0; i < lines.Length - 1; i++)
+            {
+                if (IsInsideBlockComment(lines, i)) continue;
+                string trimmed = lines[i].TrimStart();
+                if (trimmed.StartsWith("//")) continue;
+
+                bool isTerminator = Regex.IsMatch(trimmed, @"^(return\b|break\s*;|continue\s*;|throw\b)");
+                if (!isTerminator) continue;
+
+                int indent = lines[i].Length - trimmed.Length;
+
+                for (int j = i + 1; j < lines.Length; j++)
+                {
+                    string nextTrimmed = lines[j].TrimStart();
+                    if (string.IsNullOrWhiteSpace(nextTrimmed)) continue;
+                    if (nextTrimmed.StartsWith("//") || nextTrimmed.StartsWith("/*") || nextTrimmed.StartsWith("*")) continue;
+                    if (nextTrimmed == "}" || nextTrimmed == "{") break;
+
+                    int nextIndent = lines[j].Length - nextTrimmed.Length;
+                    if (nextIndent <= indent) break;
+
+                    if (nextTrimmed.StartsWith("case ") || nextTrimmed.StartsWith("default:")) break;
+
+                    diagnostics.Add(new Diagnostic(j, nextIndent, nextTrimmed.Length,
+                        "Unreachable code detected", DiagnosticSeverity.Warning));
+                    break;
+                }
+            }
+        }
+
         private void CheckBracketBalance(string[] lines, List<Diagnostic> diagnostics)
         {
             var stack = new Stack<Tuple<char, int, int>>();
@@ -262,7 +444,14 @@ namespace CodeEditor
                 CheckComparisonToNone(lines, i, line, diagnostics);
                 CheckBoolComparison(lines, i, line, diagnostics);
                 CheckTypeComparison(lines, i, line, diagnostics);
+                CheckCommonTypos(lines, i, line, diagnostics);
+                CheckEmptyBlock(lines, i, line, trimmed, diagnostics);
+                CheckDuplicateKeys(lines, i, line, trimmed, diagnostics);
             }
+
+            CheckUnterminatedStrings(lines, diagnostics);
+            CheckDuplicateDeclarations(lines, diagnostics);
+            CheckUnreachableCode(lines, diagnostics);
 
             return diagnostics;
         }
@@ -378,6 +567,186 @@ namespace CodeEditor
             {
                 diagnostics.Add(new Diagnostic(i, match.Index, match.Length,
                     "Use 'isinstance()' instead of comparing type()", DiagnosticSeverity.Hint));
+            }
+        }
+
+        private void CheckCommonTypos(string[] lines, int i, string line, List<Diagnostic> diagnostics)
+        {
+            var typos = new Dictionary<string, string>
+            {
+                { @"\bpirnt\b", "print" }, { @"\bpritn\b", "print" }, { @"\bptint\b", "print" },
+                { @"\bimpotr\b", "import" }, { @"\bimoprt\b", "import" },
+                { @"\bfrom\s+\w+\s+impotr\b", "import" },
+                { @"\bretrun\b", "return" }, { @"\breture\b", "return" },
+                { @"\bflase\b", "False" }, { @"\btrue\b(?!\s*=)", "True" },
+                { @"\bnoen\b", "None" },
+                { @"\blenght\b", "length" }, { @"\blegnth\b", "length" },
+                { @"\bappned\b", "append" }, { @"\bextned\b", "extend" },
+                { @"\binsret\b", "insert" },
+                { @"\bdefualt\b", "default" }, { @"\bdefautl\b", "default" },
+            };
+
+            foreach (var kv in typos)
+            {
+                var m = Regex.Match(line, kv.Key);
+                if (m.Success)
+                {
+                    diagnostics.Add(new Diagnostic(i, m.Index, m.Length,
+                        $"Did you mean '{kv.Value}'?", DiagnosticSeverity.Error));
+                }
+            }
+        }
+
+        private void CheckEmptyBlock(string[] lines, int i, string line, string trimmed, List<Diagnostic> diagnostics)
+        {
+            var match = Regex.Match(trimmed, @"^(if|elif|else|for|while|with|try|except|finally)\b.*:\s*$");
+            if (!match.Success) return;
+
+            for (int j = i + 1; j < lines.Length; j++)
+            {
+                string nextTrimmed = lines[j].TrimStart();
+                if (string.IsNullOrWhiteSpace(nextTrimmed)) continue;
+                if (nextTrimmed.StartsWith("#")) continue;
+
+                int blockIndent = line.Length - trimmed.Length;
+                int nextIndent = lines[j].Length - nextTrimmed.Length;
+
+                if (nextIndent <= blockIndent)
+                {
+                    int col = line.IndexOf(match.Groups[1].Value);
+                    diagnostics.Add(new Diagnostic(i, col, match.Groups[1].Length,
+                        $"Empty '{match.Groups[1].Value}' block", DiagnosticSeverity.Warning));
+                }
+                break;
+            }
+        }
+
+        private void CheckDuplicateKeys(string[] lines, int i, string line, string trimmed, List<Diagnostic> diagnostics)
+        {
+            var matches = Regex.Matches(line, @"['""](\w+)['""]\s*:");
+            var keys = new Dictionary<string, int>();
+            foreach (Match m in matches)
+            {
+                string key = m.Groups[1].Value;
+                if (keys.ContainsKey(key))
+                {
+                    diagnostics.Add(new Diagnostic(i, m.Index, m.Length,
+                        $"Duplicate key '{key}' in dictionary literal", DiagnosticSeverity.Warning));
+                }
+                else
+                {
+                    keys[key] = m.Index;
+                }
+            }
+        }
+
+        private void CheckUnterminatedStrings(string[] lines, List<Diagnostic> diagnostics)
+        {
+            bool inTriple = false;
+            char tripleChar = '"';
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                string trimmed = line.TrimStart();
+                if (!inTriple && trimmed.StartsWith("#")) continue;
+
+                for (int j = 0; j < line.Length; j++)
+                {
+                    char c = line[j];
+                    if (inTriple)
+                    {
+                        if (c == tripleChar && j + 2 < line.Length && line[j + 1] == tripleChar && line[j + 2] == tripleChar)
+                        { inTriple = false; j += 2; }
+                        continue;
+                    }
+                    if ((c == '"' || c == '\'') && j + 2 < line.Length && line[j + 1] == c && line[j + 2] == c)
+                    { inTriple = true; tripleChar = c; j += 2; continue; }
+
+                    if (c == '"' || c == '\'')
+                    {
+                        bool closed = false;
+                        for (int k = j + 1; k < line.Length; k++)
+                        {
+                            if (line[k] == '\\') { k++; continue; }
+                            if (line[k] == c) { closed = true; j = k; break; }
+                        }
+                        if (!closed)
+                        {
+                            diagnostics.Add(new Diagnostic(i, j, 1,
+                                "Unterminated string literal", DiagnosticSeverity.Error));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        private void CheckDuplicateDeclarations(string[] lines, List<Diagnostic> diagnostics)
+        {
+            var seen = new Dictionary<string, int>();
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string trimmed = lines[i].TrimStart();
+                if (trimmed.StartsWith("#")) continue;
+                int indent = lines[i].Length - trimmed.Length;
+
+                var defMatch = Regex.Match(trimmed, @"^def\s+(\w+)\s*\(");
+                if (defMatch.Success)
+                {
+                    string name = defMatch.Groups[1].Value;
+                    string key = "def:" + indent + ":" + name;
+                    if (seen.ContainsKey(key))
+                    {
+                        int col = lines[i].IndexOf(name);
+                        diagnostics.Add(new Diagnostic(i, col, name.Length,
+                            $"Function '{name}' is already defined on line {seen[key] + 1}", DiagnosticSeverity.Warning));
+                    }
+                    else { seen[key] = i; }
+                }
+
+                var classMatch = Regex.Match(trimmed, @"^class\s+(\w+)");
+                if (classMatch.Success)
+                {
+                    string name = classMatch.Groups[1].Value;
+                    string key = "class:" + indent + ":" + name;
+                    if (seen.ContainsKey(key))
+                    {
+                        int col = lines[i].IndexOf(name);
+                        diagnostics.Add(new Diagnostic(i, col, name.Length,
+                            $"Class '{name}' is already defined on line {seen[key] + 1}", DiagnosticSeverity.Warning));
+                    }
+                    else { seen[key] = i; }
+                }
+            }
+        }
+
+        private void CheckUnreachableCode(string[] lines, List<Diagnostic> diagnostics)
+        {
+            for (int i = 0; i < lines.Length - 1; i++)
+            {
+                string trimmed = lines[i].TrimStart();
+                if (trimmed.StartsWith("#") || string.IsNullOrWhiteSpace(trimmed)) continue;
+
+                bool isTerminator = Regex.IsMatch(trimmed, @"^(return\b|break\s*$|continue\s*$|raise\b)");
+                if (!isTerminator) continue;
+
+                int indent = lines[i].Length - trimmed.Length;
+
+                for (int j = i + 1; j < lines.Length; j++)
+                {
+                    string nextTrimmed = lines[j].TrimStart();
+                    if (string.IsNullOrWhiteSpace(nextTrimmed)) continue;
+                    if (nextTrimmed.StartsWith("#")) continue;
+
+                    int nextIndent = lines[j].Length - nextTrimmed.Length;
+                    if (nextIndent <= indent) break;
+
+                    diagnostics.Add(new Diagnostic(j, nextIndent, nextTrimmed.Length,
+                        "Unreachable code detected", DiagnosticSeverity.Warning));
+                    break;
+                }
             }
         }
 
@@ -506,7 +875,15 @@ namespace CodeEditor
                 CheckUndefinedComparison(lines, i, line, diagnostics);
                 CheckUndefinedInit(lines, i, line, diagnostics);
                 CheckArrowFunction(lines, i, line, trimmed, diagnostics);
+                CheckCommonTypos(lines, i, line, diagnostics);
+                CheckEmptyBlock(lines, i, trimmed, diagnostics);
+                CheckAssignmentInCondition(lines, i, line, trimmed, diagnostics);
+                CheckDuplicateKeys(lines, i, line, diagnostics);
             }
+
+            CheckUnterminatedStrings(lines, diagnostics);
+            CheckDuplicateDeclarations(lines, diagnostics);
+            CheckUnreachableCode(lines, diagnostics);
 
             return diagnostics;
         }
@@ -612,6 +989,205 @@ namespace CodeEditor
             {
                 diagnostics.Add(new Diagnostic(i, match.Index, 8,
                     "Consider using an arrow function instead", DiagnosticSeverity.Hint));
+            }
+        }
+
+        private void CheckCommonTypos(string[] lines, int i, string line, List<Diagnostic> diagnostics)
+        {
+            var typos = new Dictionary<string, string>
+            {
+                { @"\bconsle\b", "console" }, { @"\bconosle\b", "console" },
+                { @"\bdocuemnt\b", "document" }, { @"\bdocumnet\b", "document" },
+                { @"\bfuntcion\b", "function" }, { @"\bfucntion\b", "function" },
+                { @"\bretrun\b", "return" }, { @"\breture\b", "return" },
+                { @"\blenght\b", "length" }, { @"\blegnth\b", "length" },
+                { @"\bflase\b", "false" }, { @"\bture\b", "true" },
+                { @"\bnlul\b", "null" },
+                { @"\bparseINt\b", "parseInt" }, { @"\bpraseInt\b", "parseInt" },
+                { @"\bsetTimoet\b", "setTimeout" }, { @"\bsetTimout\b", "setTimeout" },
+                { @"\bsetInteval\b", "setInterval" },
+                { @"\baddEvenListener\b", "addEventListener" }, { @"\baddEventListner\b", "addEventListener" },
+                { @"\bquerySelectro\b", "querySelector" },
+            };
+
+            foreach (var kv in typos)
+            {
+                var m = Regex.Match(line, kv.Key);
+                if (m.Success)
+                {
+                    diagnostics.Add(new Diagnostic(i, m.Index, m.Length,
+                        $"Did you mean '{kv.Value}'?", DiagnosticSeverity.Error));
+                }
+            }
+        }
+
+        private void CheckEmptyBlock(string[] lines, int i, string trimmed, List<Diagnostic> diagnostics)
+        {
+            var match = Regex.Match(trimmed, @"^(if|else if|else|for|while|switch)\b");
+            if (!match.Success) return;
+
+            for (int j = i + 1; j < lines.Length; j++)
+            {
+                string next = lines[j].Trim();
+                if (next == "{") continue;
+                if (next == "}")
+                {
+                    int col = lines[i].IndexOf(match.Groups[1].Value);
+                    diagnostics.Add(new Diagnostic(i, col, match.Groups[1].Length,
+                        $"Empty '{match.Groups[1].Value}' block", DiagnosticSeverity.Warning));
+                }
+                break;
+            }
+        }
+
+        private void CheckAssignmentInCondition(string[] lines, int i, string line, string trimmed, List<Diagnostic> diagnostics)
+        {
+            var match = Regex.Match(trimmed, @"^(?:if|while)\s*\(.*[^=!<>]=[^=].*\)");
+            if (match.Success)
+            {
+                int col = lines[i].Length - trimmed.Length;
+                diagnostics.Add(new Diagnostic(i, col, match.Length,
+                    "Possible accidental assignment in condition; did you mean '===' or '=='?", DiagnosticSeverity.Warning));
+            }
+        }
+
+        private void CheckDuplicateKeys(string[] lines, int i, string line, List<Diagnostic> diagnostics)
+        {
+            var matches = Regex.Matches(line, @"(?:^|[,{])\s*(\w+)\s*:");
+            var keys = new Dictionary<string, int>();
+            foreach (Match m in matches)
+            {
+                string key = m.Groups[1].Value;
+                if (keys.ContainsKey(key))
+                {
+                    diagnostics.Add(new Diagnostic(i, m.Groups[1].Index, m.Groups[1].Length,
+                        $"Duplicate key '{key}' in object literal", DiagnosticSeverity.Warning));
+                }
+                else
+                {
+                    keys[key] = m.Groups[1].Index;
+                }
+            }
+        }
+
+        private void CheckUnterminatedStrings(string[] lines, List<Diagnostic> diagnostics)
+        {
+            bool inBlockComment = false;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                string trimmed = line.TrimStart();
+
+                for (int j = 0; j < line.Length - 1; j++)
+                {
+                    if (!inBlockComment && line[j] == '/' && line[j + 1] == '*') { inBlockComment = true; j++; continue; }
+                    if (inBlockComment && line[j] == '*' && line[j + 1] == '/') { inBlockComment = false; j++; continue; }
+                }
+                if (inBlockComment) continue;
+                if (trimmed.StartsWith("//")) continue;
+
+                bool inStr = false;
+                bool inTemplate = false;
+                char strCh = '"';
+                for (int j = 0; j < line.Length; j++)
+                {
+                    char c = line[j];
+                    if (inTemplate)
+                    {
+                        if (c == '\\' && j + 1 < line.Length) { j++; continue; }
+                        if (c == '`') { inTemplate = false; continue; }
+                        continue;
+                    }
+                    if (inStr)
+                    {
+                        if (c == '\\' && j + 1 < line.Length) { j++; continue; }
+                        if (c == strCh) { inStr = false; continue; }
+                        continue;
+                    }
+                    if (c == '/' && j + 1 < line.Length && line[j + 1] == '/') break;
+                    if (c == '`') { inTemplate = true; continue; }
+                    if (c == '"' || c == '\'') { inStr = true; strCh = c; continue; }
+                }
+                if (inStr)
+                {
+                    diagnostics.Add(new Diagnostic(i, line.Length - 1, 1,
+                        "Unterminated string literal", DiagnosticSeverity.Error));
+                }
+            }
+        }
+
+        private void CheckDuplicateDeclarations(string[] lines, List<Diagnostic> diagnostics)
+        {
+            var seen = new Dictionary<string, int>();
+            int braceDepth = 0;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string trimmed = lines[i].TrimStart();
+                if (IsInsideBlockComment(lines, i)) continue;
+                if (trimmed.StartsWith("//")) continue;
+
+                foreach (char c in trimmed)
+                {
+                    if (c == '{') braceDepth++;
+                    else if (c == '}') { braceDepth = Math.Max(0, braceDepth - 1); }
+                }
+
+                var funcMatch = Regex.Match(trimmed, @"^(?:function|async\s+function)\s+(\w+)\s*\(");
+                if (funcMatch.Success)
+                {
+                    string name = funcMatch.Groups[1].Value;
+                    string key = "func:" + braceDepth + ":" + name;
+                    if (seen.ContainsKey(key))
+                    {
+                        int col = lines[i].IndexOf(name);
+                        diagnostics.Add(new Diagnostic(i, col, name.Length,
+                            $"Function '{name}' is already declared on line {seen[key] + 1}", DiagnosticSeverity.Warning));
+                    }
+                    else { seen[key] = i; }
+                }
+
+                var varMatch = Regex.Match(trimmed, @"^(?:let|const)\s+(\w+)\s*[=;]");
+                if (varMatch.Success)
+                {
+                    string name = varMatch.Groups[1].Value;
+                    string key = "var:" + braceDepth + ":" + name;
+                    if (seen.ContainsKey(key))
+                    {
+                        int col = lines[i].IndexOf(name, lines[i].Length - trimmed.Length);
+                        diagnostics.Add(new Diagnostic(i, col, name.Length,
+                            $"Variable '{name}' is already declared on line {seen[key] + 1}", DiagnosticSeverity.Warning));
+                    }
+                    else { seen[key] = i; }
+                }
+            }
+        }
+
+        private void CheckUnreachableCode(string[] lines, List<Diagnostic> diagnostics)
+        {
+            for (int i = 0; i < lines.Length - 1; i++)
+            {
+                if (IsInsideBlockComment(lines, i)) continue;
+                string trimmed = lines[i].TrimStart();
+                if (trimmed.StartsWith("//")) continue;
+
+                bool isTerminator = Regex.IsMatch(trimmed, @"^(return\b|break\s*;|continue\s*;|throw\b)");
+                if (!isTerminator) continue;
+
+                for (int j = i + 1; j < lines.Length; j++)
+                {
+                    string nextTrimmed = lines[j].TrimStart();
+                    if (string.IsNullOrWhiteSpace(nextTrimmed)) continue;
+                    if (nextTrimmed.StartsWith("//") || nextTrimmed.StartsWith("/*") || nextTrimmed.StartsWith("*")) continue;
+                    if (nextTrimmed == "}" || nextTrimmed == "{") break;
+                    if (nextTrimmed.StartsWith("case ") || nextTrimmed.StartsWith("default:")) break;
+
+                    int nextIndent = lines[j].Length - nextTrimmed.Length;
+                    diagnostics.Add(new Diagnostic(j, nextIndent, nextTrimmed.Length,
+                        "Unreachable code detected", DiagnosticSeverity.Warning));
+                    break;
+                }
             }
         }
 

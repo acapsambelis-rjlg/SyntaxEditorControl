@@ -71,6 +71,13 @@ build.sh                               - Mono build script (for Replit environme
 - **CodeTextBox.DiagnosticsChanged** event: fires when diagnostics update
 - **Built-in providers**: CSharpDiagnosticProvider, PythonDiagnosticProvider, JavaScriptDiagnosticProvider
   - Bracket/brace matching, missing semicolons/colons, empty catch blocks, unused variables, style warnings
+  - Empty block detection (if/for/while/else with no body)
+  - Common typo detection (misspelled builtins like `pirnt`, `Consle`, `consle`, `lenght`, etc.)
+  - Unterminated string literal detection (unclosed quotes on a line)
+  - Duplicate declaration detection (same variable/function name declared twice in same scope)
+  - Unreachable code detection (code after return/break/continue/throw/raise)
+  - Duplicate key detection in dict/object literals (Python dicts, JS objects)
+  - Assignment in condition warning (C#/JS: `if (x = 5)` instead of `if (x == 5)`)
 
 ## Find & Replace
 - **Ctrl+F**: Opens find panel (overlay at top-right of editor)
