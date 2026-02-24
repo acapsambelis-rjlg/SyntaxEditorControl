@@ -2145,6 +2145,7 @@ namespace CodeEditor
                         {
                             case DiagnosticSeverity.Error: prefix = "Error"; break;
                             case DiagnosticSeverity.Warning: prefix = "Warning"; break;
+                            case DiagnosticSeverity.Hint: prefix = "Hint"; break;
                             default: prefix = "Info"; break;
                         }
                         _diagnosticTooltip.Show($"{prefix}: {diag.Message}", this, mouseX + 10, mouseY + 15);
