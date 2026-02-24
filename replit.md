@@ -60,6 +60,16 @@ build.sh                               - Mono build script (for Replit environme
 - **Bracket matching** highlight for `()`, `[]`, `{}`
 - **Code folding** with IFoldingProvider (brace-based and indent-based)
 - **Multi-cursor editing** (Ctrl+Click, Ctrl+D select next occurrence)
+- **Editor profiles** for different sizes (Full, Standard, Compact, Minimal)
+
+## Editor Profiles
+- **EditorProfile** enum: `Full`, `Standard`, `Compact`, `Minimal`
+- **CodeTextBox.ApplyProfile(EditorProfile)**: applies a preset configuration
+- **Full**: All features enabled (line numbers, folding, diagnostics, autocomplete, multi-cursor, find/replace, bracket matching, word highlight, indent guides, zoom, scrollbars)
+- **Standard**: Like Full but without indent guides or fold margin (folding provider cleared)
+- **Compact**: Line numbers, highlighting, find/replace, bracket matching, auto-indent. No multi-cursor, word highlight, zoom, folding, diagnostics, or autocomplete
+- **Minimal**: Syntax highlighting only. No line numbers, no gutter, no scrollbars — suitable for small textbox-sized editors
+- Individual toggle properties: `EnableFindReplace`, `EnableMultiCursor`, `EnableBracketMatching`, `EnableWordHighlight`, `EnableIndentGuides`, `EnableZoom`, `ShowFoldMargin`, `ShowScrollBars`
 
 ## Diagnostics System
 - **IDiagnosticProvider** interface: implement `List<Diagnostic> Analyze(string text)` to provide diagnostics

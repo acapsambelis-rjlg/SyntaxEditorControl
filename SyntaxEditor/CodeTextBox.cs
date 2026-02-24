@@ -10,6 +10,14 @@ using System.Windows.Forms;
 
 namespace CodeEditor
 {
+    public enum EditorProfile
+    {
+        Full,
+        Standard,
+        Compact,
+        Minimal
+    }
+
     public partial class CodeTextBox : Control
     {
         private TextDocument _doc = new TextDocument();
@@ -91,6 +99,15 @@ namespace CodeEditor
         private List<TextPosition> _carets = new List<TextPosition>();
         private List<TextPosition> _selectionAnchors = new List<TextPosition>();
         private List<bool> _hasSelections = new List<bool>();
+
+        private bool _enableFindReplace = true;
+        private bool _enableMultiCursor = true;
+        private bool _enableBracketMatching = true;
+        private bool _enableWordHighlight = true;
+        private bool _enableIndentGuides = true;
+        private bool _enableZoom = true;
+        private bool _showFoldMargin = true;
+        private bool _showScrollBars = true;
 
         private struct MultiLineSpan
         {
@@ -275,6 +292,129 @@ namespace CodeEditor
             set { _completionProvider = value; }
         }
 
+        public bool EnableFindReplace
+        {
+            get { return _enableFindReplace; }
+            set { _enableFindReplace = value; if (!value && _findVisible) HideFind(); }
+        }
+
+        public bool EnableMultiCursor
+        {
+            get { return _enableMultiCursor; }
+            set { _enableMultiCursor = value; if (!value) ClearExtraCursors(); }
+        }
+
+        public bool EnableBracketMatching
+        {
+            get { return _enableBracketMatching; }
+            set { _enableBracketMatching = value; if (!value) { _matchBracketA = null; _matchBracketB = null; } Invalidate(); }
+        }
+
+        public bool EnableWordHighlight
+        {
+            get { return _enableWordHighlight; }
+            set { _enableWordHighlight = value; Invalidate(); }
+        }
+
+        public bool EnableIndentGuides
+        {
+            get { return _enableIndentGuides; }
+            set { _enableIndentGuides = value; Invalidate(); }
+        }
+
+        public bool EnableZoom
+        {
+            get { return _enableZoom; }
+            set { _enableZoom = value; }
+        }
+
+        public bool ShowFoldMargin
+        {
+            get { return _showFoldMargin; }
+            set { _showFoldMargin = value; UpdateGutterWidth(); Invalidate(); }
+        }
+
+        public bool ShowScrollBars
+        {
+            get { return _showScrollBars; }
+            set
+            {
+                _showScrollBars = value;
+                _vScrollBar.Visible = value;
+                _hScrollBar.Visible = value;
+                Invalidate();
+            }
+        }
+
+        public void ApplyProfile(EditorProfile profile)
+        {
+            switch (profile)
+            {
+                case EditorProfile.Full:
+                    ShowLineNumbers = true;
+                    HighlightCurrentLine = true;
+                    AutoIndent = true;
+                    EnableFindReplace = true;
+                    EnableMultiCursor = true;
+                    EnableBracketMatching = true;
+                    EnableWordHighlight = true;
+                    EnableIndentGuides = true;
+                    EnableZoom = true;
+                    ShowFoldMargin = true;
+                    ShowScrollBars = true;
+                    break;
+
+                case EditorProfile.Standard:
+                    ShowLineNumbers = true;
+                    HighlightCurrentLine = true;
+                    AutoIndent = true;
+                    EnableFindReplace = true;
+                    EnableMultiCursor = true;
+                    EnableBracketMatching = true;
+                    EnableWordHighlight = true;
+                    EnableIndentGuides = false;
+                    EnableZoom = true;
+                    ShowFoldMargin = false;
+                    ShowScrollBars = true;
+                    FoldingProvider = null;
+                    break;
+
+                case EditorProfile.Compact:
+                    ShowLineNumbers = true;
+                    HighlightCurrentLine = true;
+                    AutoIndent = true;
+                    EnableFindReplace = true;
+                    EnableMultiCursor = false;
+                    EnableBracketMatching = true;
+                    EnableWordHighlight = false;
+                    EnableIndentGuides = false;
+                    EnableZoom = false;
+                    ShowFoldMargin = false;
+                    ShowScrollBars = true;
+                    FoldingProvider = null;
+                    DiagnosticProvider = null;
+                    CompletionProvider = null;
+                    break;
+
+                case EditorProfile.Minimal:
+                    ShowLineNumbers = false;
+                    HighlightCurrentLine = false;
+                    AutoIndent = false;
+                    EnableFindReplace = false;
+                    EnableMultiCursor = false;
+                    EnableBracketMatching = false;
+                    EnableWordHighlight = false;
+                    EnableIndentGuides = false;
+                    EnableZoom = false;
+                    ShowFoldMargin = false;
+                    ShowScrollBars = false;
+                    FoldingProvider = null;
+                    DiagnosticProvider = null;
+                    CompletionProvider = null;
+                    break;
+            }
+        }
+
         #endregion
 
         #region Designer Event Handlers
@@ -317,10 +457,11 @@ namespace CodeEditor
 
         private void UpdateGutterWidth()
         {
-            if (!_showLineNumbers) { _gutterWidth = _foldingProvider != null ? FoldMarginWidth : 0; return; }
+            bool hasFoldMargin = _showFoldMargin && _foldingProvider != null;
+            if (!_showLineNumbers) { _gutterWidth = hasFoldMargin ? FoldMarginWidth : 0; return; }
             int digits = Math.Max(3, _doc.LineCount.ToString().Length);
             _gutterWidth = (int)(digits * _charWidth) + GutterPadding * 2;
-            if (_foldingProvider != null)
+            if (hasFoldMargin)
                 _gutterWidth += FoldMarginWidth;
         }
 
@@ -499,11 +640,15 @@ namespace CodeEditor
             if (_hasSelection)
                 PaintSelection(g, firstVisIdx, lastVisIdx);
 
-            PaintWordOccurrenceHighlights(g, firstVisIdx, lastVisIdx);
+            if (_enableWordHighlight)
+                PaintWordOccurrenceHighlights(g, firstVisIdx, lastVisIdx);
             PaintFindHighlights(g, firstVisIdx, lastVisIdx);
-            PaintBracketMatching(g);
-            PaintExtraCursors(g);
-            PaintIndentGuides(g, firstVisIdx, lastVisIdx);
+            if (_enableBracketMatching)
+                PaintBracketMatching(g);
+            if (_enableMultiCursor)
+                PaintExtraCursors(g);
+            if (_enableIndentGuides)
+                PaintIndentGuides(g, firstVisIdx, lastVisIdx);
 
             for (int vi = firstVisIdx; vi <= lastVisIdx; vi++)
             {
@@ -537,7 +682,7 @@ namespace CodeEditor
 
             if (_showLineNumbers)
             {
-                int foldOffset = _foldingProvider != null ? FoldMarginWidth : 0;
+                int foldOffset = (_showFoldMargin && _foldingProvider != null) ? FoldMarginWidth : 0;
                 int lineNumWidth = _gutterWidth - foldOffset;
 
                 using (var gutterBrush = new SolidBrush(_ruleset.LineNumberBackColor))
@@ -558,7 +703,7 @@ namespace CodeEditor
                     PaintFoldMargin(g, (int)y, actualLine);
                 }
             }
-            else if (_foldingProvider != null)
+            else if (_showFoldMargin && _foldingProvider != null)
             {
                 using (var gutterBrush = new SolidBrush(_ruleset.LineNumberBackColor))
                     g.FillRectangle(gutterBrush, 0, 0, _gutterWidth, ClientSize.Height);
@@ -946,7 +1091,7 @@ namespace CodeEditor
 
             if (e.Button == MouseButtons.Left)
             {
-                if (_foldingProvider != null && e.X >= _gutterWidth - FoldMarginWidth && e.X < _gutterWidth)
+                if (_showFoldMargin && _foldingProvider != null && e.X >= _gutterWidth - FoldMarginWidth && e.X < _gutterWidth)
                 {
                     RebuildFoldRegions();
                     int visRow = (int)(e.Y / _lineHeight) + _scrollY;
@@ -960,7 +1105,7 @@ namespace CodeEditor
 
                 var pos = PositionFromPoint(e.X, e.Y);
 
-                if ((ModifierKeys & Keys.Control) != 0 && e.X > _gutterWidth)
+                if (_enableMultiCursor && (ModifierKeys & Keys.Control) != 0 && e.X > _gutterWidth)
                 {
                     AddCursorAtPosition(pos);
                     return;
@@ -1098,7 +1243,7 @@ namespace CodeEditor
         {
             base.OnMouseWheel(e);
 
-            if ((ModifierKeys & Keys.Control) != 0)
+            if (_enableZoom && (ModifierKeys & Keys.Control) != 0)
             {
                 float step = e.Delta > 0 ? 1f : -1f;
                 float newSize = Math.Max(MinFontSize, Math.Min(MaxFontSize, _baseFontSize + step));
@@ -1216,7 +1361,7 @@ namespace CodeEditor
                     break;
                 case Keys.Y: if (ctrl) { PerformRedo(); e.Handled = true; } break;
                 case Keys.D:
-                    if (ctrl)
+                    if (ctrl && _enableMultiCursor)
                     {
                         SelectNextOccurrence();
                         e.Handled = true;
@@ -1229,14 +1374,13 @@ namespace CodeEditor
                     else if (ctrl) { TransformCase(false); e.Handled = true; }
                     break;
                 case Keys.F:
-                    if (ctrl) { ShowFind(); e.Handled = true; e.SuppressKeyPress = true; }
+                    if (ctrl && _enableFindReplace) { ShowFind(); e.Handled = true; e.SuppressKeyPress = true; }
                     break;
                 case Keys.H:
-                    if (ctrl) { ShowReplace(); e.Handled = true; e.SuppressKeyPress = true; }
+                    if (ctrl && _enableFindReplace) { ShowReplace(); e.Handled = true; e.SuppressKeyPress = true; }
                     break;
                 case Keys.F3:
-                    if (shift) { FindPrevious(); e.Handled = true; }
-                    else { FindNext(); e.Handled = true; }
+                    if (_enableFindReplace) { if (shift) FindPrevious(); else FindNext(); e.Handled = true; }
                     break;
                 case Keys.Space:
                     if (ctrl) { ShowCompletion(); e.Handled = true; e.SuppressKeyPress = true; }
@@ -2166,6 +2310,7 @@ namespace CodeEditor
             _matchBracketA = null;
             _matchBracketB = null;
 
+            if (!_enableBracketMatching) return;
             if (_caret.Line >= _doc.LineCount) return;
             string line = _doc.GetLine(_caret.Line);
 
