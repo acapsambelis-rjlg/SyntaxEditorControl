@@ -319,11 +319,11 @@ namespace CodeEditor
                     string nextTrimmed = lines[j].TrimStart();
                     if (string.IsNullOrWhiteSpace(nextTrimmed)) continue;
                     if (nextTrimmed.StartsWith("//") || nextTrimmed.StartsWith("/*") || nextTrimmed.StartsWith("*")) continue;
-                    if (nextTrimmed == "}" || nextTrimmed == "{") break;
 
                     int nextIndent = lines[j].Length - nextTrimmed.Length;
-                    if (nextIndent <= indent) break;
-
+                    if (nextIndent < indent) break;
+                    if (nextTrimmed == "}" || nextTrimmed == "{") break;
+                    if (nextIndent != indent) continue;
                     if (nextTrimmed.StartsWith("case ") || nextTrimmed.StartsWith("default:")) break;
 
                     diagnostics.Add(new Diagnostic(j, nextIndent, nextTrimmed.Length,
@@ -1175,15 +1175,20 @@ namespace CodeEditor
                 bool isTerminator = Regex.IsMatch(trimmed, @"^(return\b|break\s*;|continue\s*;|throw\b)");
                 if (!isTerminator) continue;
 
+                int indent = lines[i].Length - trimmed.Length;
+
                 for (int j = i + 1; j < lines.Length; j++)
                 {
                     string nextTrimmed = lines[j].TrimStart();
                     if (string.IsNullOrWhiteSpace(nextTrimmed)) continue;
                     if (nextTrimmed.StartsWith("//") || nextTrimmed.StartsWith("/*") || nextTrimmed.StartsWith("*")) continue;
-                    if (nextTrimmed == "}" || nextTrimmed == "{") break;
-                    if (nextTrimmed.StartsWith("case ") || nextTrimmed.StartsWith("default:")) break;
 
                     int nextIndent = lines[j].Length - nextTrimmed.Length;
+                    if (nextIndent < indent) break;
+                    if (nextTrimmed == "}" || nextTrimmed == "{") break;
+                    if (nextIndent != indent) continue;
+                    if (nextTrimmed.StartsWith("case ") || nextTrimmed.StartsWith("default:")) break;
+
                     diagnostics.Add(new Diagnostic(j, nextIndent, nextTrimmed.Length,
                         "Unreachable code detected", DiagnosticSeverity.Warning));
                     break;
