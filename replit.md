@@ -4,20 +4,28 @@
 A custom code text editor control built with Mono/.NET Framework (C# + WinForms) that provides IDE-like functionality without using RichTextBox. The control is generic and reusable, supporting configurable syntax highlighting rulesets for any programming language.
 
 ## Project Architecture
-- **Runtime**: Mono 6.14.1, .NET Framework compatible
+- **Runtime**: Mono 6.14.1, .NET Framework 4.7.2 compatible
 - **UI Framework**: System.Windows.Forms (WinForms)
-- **Build**: `build.sh` compiles with `mcs` (Mono C# Compiler)
-- **Output**: `CodeEditor.exe` (run via `mono CodeEditor.exe`)
+- **Build (Replit)**: `build.sh` compiles with `mcs` (Mono C# Compiler)
+- **Build (Visual Studio)**: Open `CodeEditor.sln`, build via MSBuild
+- **Output**: `CodeEditor.exe` (run via `mono CodeEditor.exe` on Linux)
 
 ## File Structure
 ```
+CodeEditor.sln               - Visual Studio solution file
 src/
-  SyntaxRule.cs      - SyntaxRule, SyntaxRuleset classes for configurable highlighting
-  TextDocument.cs    - Document model with undo/redo stack (TextPosition, TextRange, UndoAction)
-  CodeTextBox.cs     - The main custom Control (CodeTextBox) - all rendering and input handling
-  TestForm.cs        - Demo form with menu, language selector, and sample code
-  Program.cs         - Entry point
-build.sh             - Build script
+  CodeEditor.csproj           - Visual Studio project file (.NET Framework 4.7.2)
+  SyntaxRule.cs               - SyntaxRule, SyntaxRuleset classes for configurable highlighting
+  TextDocument.cs             - Document model with undo/redo stack (TextPosition, TextRange, UndoAction)
+  CodeTextBox.cs              - Main custom Control (CodeTextBox) - rendering and input handling
+  CodeTextBox.Designer.cs     - Designer-generated component initialization (scrollbars, timer)
+  CodeTextBox.resx            - CodeTextBox embedded resources
+  DarkMenuRenderer.cs         - Custom dark theme menu renderer
+  TestForm.cs                 - Demo form with menu, language selector, and sample code
+  TestForm.Designer.cs        - Designer-generated form layout and controls
+  TestForm.resx               - TestForm embedded resources
+  Program.cs                  - Entry point
+build.sh                      - Mono build script (for Replit environment)
 ```
 
 ## Key Features
