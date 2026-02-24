@@ -52,8 +52,10 @@
     <Compile Include="CodeTextBox.Designer.cs">
       <DependentUpon>CodeTextBox.cs</DependentUpon>
     </Compile>
+    <Compile Include="CompletionProvider.cs" />
     <Compile Include="Diagnostic.cs" />
     <Compile Include="DiagnosticProviders.cs" />
+    <Compile Include="FoldingProvider.cs" />
     <Compile Include="MenuRenderer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
