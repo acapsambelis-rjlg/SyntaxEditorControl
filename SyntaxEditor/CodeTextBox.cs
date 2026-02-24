@@ -47,6 +47,7 @@ namespace CodeEditor
         private bool _multiLineDirty = true;
 
         private IDiagnosticProvider _diagnosticProvider;
+        private AnalysisContext _analysisContext;
         private List<Diagnostic> _diagnostics = new List<Diagnostic>();
         private Dictionary<int, List<Diagnostic>> _diagnosticsByLine = new Dictionary<int, List<Diagnostic>>();
         private Timer _diagnosticTimer;
@@ -174,6 +175,16 @@ namespace CodeEditor
             set
             {
                 _diagnosticProvider = value;
+                RunDiagnostics();
+            }
+        }
+
+        public AnalysisContext AnalysisContext
+        {
+            get { return _analysisContext; }
+            set
+            {
+                _analysisContext = value;
                 RunDiagnostics();
             }
         }
@@ -1524,7 +1535,11 @@ namespace CodeEditor
 
             try
             {
-                var results = _diagnosticProvider.Analyze(_doc.Text);
+                List<Diagnostic> results;
+                if (_analysisContext != null)
+                    results = _diagnosticProvider.Analyze(_doc.Text, _analysisContext);
+                else
+                    results = _diagnosticProvider.Analyze(_doc.Text);
                 _diagnostics = results ?? new List<Diagnostic>();
             }
             catch

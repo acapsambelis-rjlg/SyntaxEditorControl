@@ -8,6 +8,11 @@ namespace CodeEditor
     {
         public List<Diagnostic> Analyze(string text)
         {
+            return Analyze(text, null);
+        }
+
+        public List<Diagnostic> Analyze(string text, AnalysisContext context)
+        {
             var diagnostics = new List<Diagnostic>();
             var lines = text.Split('\n');
 
@@ -196,6 +201,11 @@ namespace CodeEditor
     public class PythonDiagnosticProvider : IDiagnosticProvider
     {
         public List<Diagnostic> Analyze(string text)
+        {
+            return Analyze(text, null);
+        }
+
+        public List<Diagnostic> Analyze(string text, AnalysisContext context)
         {
             var diagnostics = new List<Diagnostic>();
             var lines = text.Split('\n');
@@ -408,6 +418,11 @@ namespace CodeEditor
     public class JavaScriptDiagnosticProvider : IDiagnosticProvider
     {
         public List<Diagnostic> Analyze(string text)
+        {
+            return Analyze(text, null);
+        }
+
+        public List<Diagnostic> Analyze(string text, AnalysisContext context)
         {
             var diagnostics = new List<Diagnostic>();
             var lines = text.Split('\n');

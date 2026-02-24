@@ -54,12 +54,24 @@ build.sh                               - Mono build script (for Replit environme
 
 ## Diagnostics System
 - **IDiagnosticProvider** interface: implement `List<Diagnostic> Analyze(string text)` to provide diagnostics
+  - Also supports `Analyze(string text, AnalysisContext context)` for cross-file symbol resolution
 - **DiagnosticSeverity**: Error (red squiggle), Warning (yellow squiggle), Info (green squiggle)
 - **CodeTextBox.DiagnosticProvider** property: set to auto-analyze on text change (500ms debounce)
+- **CodeTextBox.AnalysisContext** property: set to provide cross-file symbol info to the provider
 - **CodeTextBox.SetDiagnostics()** / **ClearDiagnostics()**: manually set/clear diagnostics
 - **CodeTextBox.DiagnosticsChanged** event: fires when diagnostics update
 - **Built-in providers**: CSharpDiagnosticProvider, PythonDiagnosticProvider, JavaScriptDiagnosticProvider
   - Bracket/brace matching, missing semicolons/colons, empty catch blocks, unused variables, style warnings
+
+## Cross-File Analysis Infrastructure (for multi-file editors)
+- **SymbolInfo**: represents an exported symbol (name, kind, return type, parameters, visibility, metadata)
+- **SymbolKind** enum: Class, Struct, Interface, Enum, Function, Method, Property, Field, Variable, Constant, Namespace, Module, Event, Delegate, TypeAlias
+- **FileSymbols**: groups exported symbols for a single file (HasSymbol, GetSymbol, GetSymbolsByKind)
+- **AnalysisContext**: holds a map of FileSymbols keyed by file path, with cross-file resolution:
+  - `ResolveSymbol(name)` — finds a symbol across all other files
+  - `GetAllExportedSymbolNames()` / `GetAllExportedSymbols()` — enumerates available cross-file symbols
+  - `CurrentFilePath` — identifies which file is being analyzed (excluded from resolution)
+- Usage: host app populates an AnalysisContext with FileSymbols from each open file, sets `CodeTextBox.AnalysisContext`, and the provider's `Analyze(text, context)` uses it to avoid false positives on cross-file imports
 
 ## Keyboard Shortcuts
 - Ctrl+Z: Undo | Ctrl+Y / Ctrl+Shift+Z: Redo
