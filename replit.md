@@ -6,31 +6,39 @@ A custom code text editor control built with Mono/.NET Framework (C# + WinForms)
 ## Project Architecture
 - **Runtime**: Mono 6.14.1, .NET Framework 4.7.2 compatible
 - **UI Framework**: System.Windows.Forms (WinForms)
+- **Theme**: Light theme (white background, dark text, VS-style syntax colors)
 - **Build (Replit)**: `build.sh` compiles with `mcs` (Mono C# Compiler)
 - **Build (Visual Studio)**: Open `CodeEditor.sln`, build via MSBuild
 - **Output**: `CodeEditor.exe` (run via `mono CodeEditor.exe` on Linux)
 
 ## File Structure
 ```
-CodeEditor.sln               - Visual Studio solution file
-src/
-  CodeEditor.csproj           - Visual Studio project file (.NET Framework 4.7.2)
-  SyntaxRule.cs               - SyntaxRule, SyntaxRuleset classes for configurable highlighting
-  TextDocument.cs             - Document model with undo/redo stack (TextPosition, TextRange, UndoAction)
-  CodeTextBox.cs              - Main custom Control (CodeTextBox) - rendering and input handling
-  CodeTextBox.Designer.cs     - Designer-generated component initialization (scrollbars, timer)
-  CodeTextBox.resx            - CodeTextBox embedded resources
-  DarkMenuRenderer.cs         - Custom dark theme menu renderer
-  TestForm.cs                 - Demo form with menu, language selector, and sample code
-  TestForm.Designer.cs        - Designer-generated form layout and controls
-  TestForm.resx               - TestForm embedded resources
-  Program.cs                  - Entry point
-build.sh                      - Mono build script (for Replit environment)
+CodeEditor.sln                        - Visual Studio solution file
+SyntaxEditor/
+  SyntaxEditor.csproj                  - Visual Studio project file (.NET Framework 4.7.2)
+  SyntaxRule.cs                        - SyntaxRule, SyntaxRuleset classes for configurable highlighting
+  TextDocument.cs                      - Document model with undo/redo stack (TextPosition, TextRange, UndoAction)
+  CodeTextBox.cs                       - Main custom Control (CodeTextBox) - rendering and input handling
+  CodeTextBox.Designer.cs              - Designer-generated component initialization (scrollbars, timer)
+  CodeTextBox.resx                     - CodeTextBox embedded resources
+  DarkMenuRenderer.cs                  - Light theme menu renderer (LightMenuRenderer class)
+  TestForm.cs                          - Demo form with menu, language selector, and sample code
+  TestForm.Designer.cs                 - Designer-generated form layout and controls
+  TestForm.resx                        - TestForm embedded resources
+  Program.cs                           - Entry point
+  App.config                           - Runtime configuration
+  Properties/
+    AssemblyInfo.cs                    - Assembly metadata
+    Resources.Designer.cs              - Auto-generated resources accessor
+    Resources.resx                     - Project resources
+    Settings.Designer.cs               - Auto-generated settings accessor
+build.sh                               - Mono build script (for Replit environment)
 ```
 
 ## Key Features
 - Custom owner-drawn text rendering (no RichTextBox)
 - Configurable syntax highlighting via SyntaxRuleset (regex-based)
+- All theme colors driven by SyntaxRuleset properties (fully themeable)
 - Undo/Redo with composite actions
 - Line duplication (Ctrl+D), line deletion (Ctrl+Shift+L)
 - Selection via mouse and keyboard, click-and-drag text

@@ -75,9 +75,9 @@ namespace CodeEditor
             //
             // _menuStrip
             //
-            this._menuStrip.BackColor = System.Drawing.Color.FromArgb(45, 45, 45);
-            this._menuStrip.ForeColor = System.Drawing.Color.White;
-            this._menuStrip.Renderer = new DarkMenuRenderer();
+            this._menuStrip.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
+            this._menuStrip.ForeColor = System.Drawing.Color.FromArgb(30, 30, 30);
+            this._menuStrip.Renderer = new LightMenuRenderer();
             this._menuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
                 this._fileMenu,
                 this._editMenu,
@@ -209,7 +209,7 @@ namespace CodeEditor
             //
             this._toolbar.Dock = System.Windows.Forms.DockStyle.Top;
             this._toolbar.Height = 36;
-            this._toolbar.BackColor = System.Drawing.Color.FromArgb(37, 37, 38);
+            this._toolbar.BackColor = System.Drawing.Color.FromArgb(230, 230, 230);
             this._toolbar.Padding = new System.Windows.Forms.Padding(5, 4, 5, 4);
             this._toolbar.Controls.Add(this._helpLabel);
             this._toolbar.Controls.Add(this._languageSelector);
@@ -219,7 +219,7 @@ namespace CodeEditor
             // _toolbarLabel
             //
             this._toolbarLabel.Text = "Language:";
-            this._toolbarLabel.ForeColor = System.Drawing.Color.FromArgb(200, 200, 200);
+            this._toolbarLabel.ForeColor = System.Drawing.Color.FromArgb(30, 30, 30);
             this._toolbarLabel.AutoSize = true;
             this._toolbarLabel.Location = new System.Drawing.Point(8, 9);
 
@@ -229,8 +229,8 @@ namespace CodeEditor
             this._languageSelector.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this._languageSelector.Location = new System.Drawing.Point(80, 5);
             this._languageSelector.Width = 160;
-            this._languageSelector.BackColor = System.Drawing.Color.FromArgb(60, 60, 60);
-            this._languageSelector.ForeColor = System.Drawing.Color.White;
+            this._languageSelector.BackColor = System.Drawing.Color.White;
+            this._languageSelector.ForeColor = System.Drawing.Color.FromArgb(30, 30, 30);
             this._languageSelector.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this._languageSelector.Items.AddRange(new object[] { "C#", "Python", "JavaScript", "Plain Text" });
             this._languageSelector.SelectedIndexChanged += new System.EventHandler(this.LanguageSelector_SelectedIndexChanged);
@@ -239,7 +239,7 @@ namespace CodeEditor
             // _helpLabel
             //
             this._helpLabel.Text = "Shortcuts: Ctrl+D Duplicate | Ctrl+Shift+L Delete Line | Ctrl+Z/Y Undo/Redo | Tab/Shift+Tab Indent | Ctrl+U Case";
-            this._helpLabel.ForeColor = System.Drawing.Color.FromArgb(140, 140, 140);
+            this._helpLabel.ForeColor = System.Drawing.Color.FromArgb(100, 100, 100);
             this._helpLabel.AutoSize = true;
             this._helpLabel.Location = new System.Drawing.Point(260, 9);
 
@@ -257,7 +257,7 @@ namespace CodeEditor
             this._statusLabel.Dock = System.Windows.Forms.DockStyle.Bottom;
             this._statusLabel.Height = 24;
             this._statusLabel.BackColor = System.Drawing.Color.FromArgb(0, 122, 204);
-            this._statusLabel.ForeColor = System.Drawing.Color.White;
+            this._statusLabel.ForeColor = System.Drawing.Color.FromArgb(255, 255, 255);
             this._statusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this._statusLabel.Padding = new System.Windows.Forms.Padding(8, 0, 0, 0);
             this._statusLabel.Text = "Ready";
@@ -270,8 +270,8 @@ namespace CodeEditor
             this.ClientSize = new System.Drawing.Size(1100, 750);
             this.Text = "Code Editor - Test Form";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.BackColor = System.Drawing.Color.FromArgb(45, 45, 45);
-            this.ForeColor = System.Drawing.Color.White;
+            this.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
+            this.ForeColor = System.Drawing.Color.FromArgb(30, 30, 30);
             this.MainMenuStrip = this._menuStrip;
 
             this.Controls.Add(this._codeTextBox);

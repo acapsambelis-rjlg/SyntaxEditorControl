@@ -124,13 +124,13 @@ namespace CodeEditor
                 dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
                 dialog.MaximizeBox = false;
                 dialog.MinimizeBox = false;
-                dialog.BackColor = Color.FromArgb(45, 45, 45);
-                dialog.ForeColor = Color.White;
+                dialog.BackColor = Color.FromArgb(240, 240, 240);
+                dialog.ForeColor = Color.FromArgb(30, 30, 30);
 
                 var label = new Label { Text = $"Line number (1 - {_codeTextBox.LineCount}):", Location = new Point(12, 15), AutoSize = true };
-                var textBox = new TextBox { Location = new Point(12, 40), Width = 260, BackColor = Color.FromArgb(60, 60, 60), ForeColor = Color.White };
+                var textBox = new TextBox { Location = new Point(12, 40), Width = 260, BackColor = Color.White, ForeColor = Color.FromArgb(30, 30, 30) };
                 var okButton = new Button { Text = "Go", DialogResult = DialogResult.OK, Location = new Point(116, 70), Width = 75, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(0, 122, 204), ForeColor = Color.White };
-                var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(197, 70), Width = 75, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(60, 60, 60), ForeColor = Color.White };
+                var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(197, 70), Width = 75, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(218, 218, 218), ForeColor = Color.FromArgb(30, 30, 30) };
 
                 dialog.Controls.AddRange(new Control[] { label, textBox, okButton, cancelButton });
                 dialog.AcceptButton = okButton;

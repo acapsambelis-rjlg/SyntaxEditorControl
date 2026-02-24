@@ -347,7 +347,7 @@ namespace CodeEditor
                 using (var gutterBrush = new SolidBrush(_ruleset.LineNumberBackColor))
                     g.FillRectangle(gutterBrush, 0, 0, _gutterWidth, ClientSize.Height);
 
-                using (var pen = new Pen(Color.FromArgb(50, 50, 50)))
+                using (var pen = new Pen(_ruleset.GutterSeparatorColor))
                     g.DrawLine(pen, _gutterWidth - 1, 0, _gutterWidth - 1, ClientSize.Height);
             }
 
@@ -368,7 +368,7 @@ namespace CodeEditor
                 if (_showLineNumbers)
                 {
                     string num = (i + 1).ToString();
-                    using (var brush = new SolidBrush(i == _caret.Line ? Color.FromArgb(180, 180, 180) : _ruleset.LineNumberForeColor))
+                    using (var brush = new SolidBrush(i == _caret.Line ? _ruleset.ActiveLineNumberColor : _ruleset.LineNumberForeColor))
                     {
                         float numX = _gutterWidth - GutterPadding - g.MeasureString(num, _editorFont, 0, StringFormat.GenericTypographic).Width;
                         g.DrawString(num, _editorFont, brush, numX, y, StringFormat.GenericTypographic);
