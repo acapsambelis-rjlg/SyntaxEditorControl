@@ -499,6 +499,7 @@ namespace CodeEditor
             if (_hasSelection)
                 PaintSelection(g, firstVisIdx, lastVisIdx);
 
+            PaintWordOccurrenceHighlights(g, firstVisIdx, lastVisIdx);
             PaintFindHighlights(g, firstVisIdx, lastVisIdx);
             PaintBracketMatching(g);
             PaintExtraCursors(g);
@@ -589,6 +590,53 @@ namespace CodeEditor
                     float x2 = _gutterWidth + TextLeftPadding + endCol * _charWidth - _scrollX;
                     if (i != range.End.Line) x2 += _charWidth;
                     g.FillRectangle(brush, x1, y, x2 - x1, _lineHeight);
+                }
+            }
+        }
+
+        private void PaintWordOccurrenceHighlights(Graphics g, int firstVisIdx, int lastVisIdx)
+        {
+            if (!_hasSelection) return;
+            string selected = GetSelectedText();
+            if (string.IsNullOrEmpty(selected)) return;
+            if (selected.Contains("\n") || selected.Contains("\r")) return;
+
+            bool isWord = true;
+            foreach (char c in selected)
+            {
+                if (!char.IsLetterOrDigit(c) && c != '_') { isWord = false; break; }
+            }
+            if (!isWord) return;
+
+            var range = GetSelectionRange();
+            if (range.Start.Line != range.End.Line) return;
+
+            using (var brush = new SolidBrush(Color.FromArgb(60, 180, 210, 255)))
+            using (var borderPen = new Pen(Color.FromArgb(100, 120, 170, 220), 1f))
+            {
+                for (int vi = firstVisIdx; vi <= lastVisIdx; vi++)
+                {
+                    int actualLine = VisibleToActualLine(vi);
+                    float y = (vi - _scrollY) * _lineHeight;
+                    string line = _doc.GetLine(actualLine);
+
+                    int idx = 0;
+                    while ((idx = line.IndexOf(selected, idx, StringComparison.Ordinal)) >= 0)
+                    {
+                        if (actualLine == range.Start.Line && idx == range.Start.Column)
+                        { idx += selected.Length; continue; }
+
+                        bool wordStart = idx == 0 || !IsWordChar(line[idx - 1]);
+                        bool wordEnd = idx + selected.Length >= line.Length || !IsWordChar(line[idx + selected.Length]);
+                        if (wordStart && wordEnd)
+                        {
+                            float x = _gutterWidth + TextLeftPadding + idx * _charWidth - _scrollX;
+                            float w = selected.Length * _charWidth;
+                            g.FillRectangle(brush, x, y, w, _lineHeight);
+                            g.DrawRectangle(borderPen, x, y, w, _lineHeight);
+                        }
+                        idx += selected.Length;
+                    }
                 }
             }
         }
