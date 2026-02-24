@@ -46,6 +46,12 @@ namespace CodeEditor
         }
     }
 
+    public enum IndentGuideAlignment
+    {
+        Left,
+        Center
+    }
+
     public class SyntaxRuleset
     {
         public string LanguageName { get; set; }
@@ -61,6 +67,7 @@ namespace CodeEditor
         public Color ActiveLineNumberColor { get; set; }
         public string LineCommentToken { get; set; }
         public Color IndentGuideColor { get; set; }
+        public IndentGuideAlignment IndentGuideAlign { get; set; }
 
         public SyntaxRuleset(string languageName)
         {
@@ -77,6 +84,7 @@ namespace CodeEditor
             ActiveLineNumberColor = Color.FromArgb(50, 50, 50);
             LineCommentToken = null;
             IndentGuideColor = Color.FromArgb(220, 220, 220);
+            IndentGuideAlign = IndentGuideAlignment.Left;
         }
 
         public void AddRule(string name, string pattern, Color foreColor, FontStyle fontStyle = FontStyle.Regular)
@@ -95,6 +103,7 @@ namespace CodeEditor
         {
             var rs = new SyntaxRuleset("C#");
             rs.LineCommentToken = "//";
+            rs.IndentGuideAlign = IndentGuideAlignment.Center;
             rs.AddRule("Comment", @"//.*$|/\*[\s\S]*?\*/", Color.FromArgb(0, 128, 0), FontStyle.Italic);
             rs.AddRule("InterpolatedString", "\\$\"(?:[^\"\\\\]|\\\\.)*\"", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\{[^}]*\}");
             rs.AddRule("String", "\"(?:[^\"\\\\]|\\\\.)*\"|@\"(?:\"\"|[^\"])*\"", Color.FromArgb(163, 21, 21));
@@ -135,6 +144,7 @@ namespace CodeEditor
         {
             var rs = new SyntaxRuleset("JavaScript");
             rs.LineCommentToken = "//";
+            rs.IndentGuideAlign = IndentGuideAlignment.Center;
             rs.AddRule("Comment", @"//.*$|/\*[\s\S]*?\*/", Color.FromArgb(0, 128, 0), FontStyle.Italic);
             rs.AddRule("TemplateString", @"`(?:[^`\\]|\\.|\$\{[^}]*\})*`", Color.FromArgb(163, 21, 21), FontStyle.Regular, @"\$\{[^}]*\}");
             rs.AddRule("String", "\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'", Color.FromArgb(163, 21, 21));

@@ -617,6 +617,8 @@ namespace CodeEditor
             if (_tabSize <= 0) return;
 
             float guideSpacing = _tabSize * _charWidth;
+            float centerOffset = _ruleset.IndentGuideAlign == IndentGuideAlignment.Center
+                ? (_tabSize * _charWidth) / 2f : 0f;
             using (var pen = new Pen(_ruleset.IndentGuideColor, 1f))
             {
                 pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dot;
@@ -643,7 +645,7 @@ namespace CodeEditor
 
                     for (int level = 1; level <= guideLevels; level++)
                     {
-                        float x = _gutterWidth + TextLeftPadding + level * guideSpacing - _scrollX;
+                        float x = _gutterWidth + TextLeftPadding + level * guideSpacing - _scrollX + centerOffset;
                         if (x > _gutterWidth && x < ClientSize.Width - _vScrollBar.Width)
                             g.DrawLine(pen, x, y, x, y + _lineHeight);
                     }
