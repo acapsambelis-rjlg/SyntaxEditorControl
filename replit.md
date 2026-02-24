@@ -18,10 +18,11 @@ SyntaxEditor/
   SyntaxEditor.csproj                  - Visual Studio project file (.NET Framework 4.7.2)
   SyntaxRule.cs                        - SyntaxRule, SyntaxRuleset classes for configurable highlighting
   TextDocument.cs                      - Document model with undo/redo stack (TextPosition, TextRange, UndoAction)
+  Diagnostic.cs                        - Diagnostic, DiagnosticSeverity, IDiagnosticProvider, DiagnosticsChangedEventArgs
+  DiagnosticProviders.cs               - Example providers: CSharpDiagnosticProvider, PythonDiagnosticProvider, JavaScriptDiagnosticProvider
   CodeTextBox.cs                       - Main custom Control (CodeTextBox) - rendering and input handling
   CodeTextBox.Designer.cs              - Designer-generated component initialization (scrollbars, timer)
   CodeTextBox.resx                     - CodeTextBox embedded resources
-  DarkMenuRenderer.cs                  - Light theme menu renderer (LightMenuRenderer class)
   TestForm.cs                          - Demo form with menu, language selector, and sample code
   TestForm.Designer.cs                 - Designer-generated form layout and controls
   TestForm.resx                        - TestForm embedded resources
@@ -39,15 +40,26 @@ build.sh                               - Mono build script (for Replit environme
 - Custom owner-drawn text rendering (no RichTextBox)
 - Configurable syntax highlighting via SyntaxRuleset (regex-based)
 - All theme colors driven by SyntaxRuleset properties (fully themeable)
+- Diagnostics system with IDiagnosticProvider interface, squiggly underlines, and hover tooltips
 - Undo/Redo with composite actions
 - Line duplication (Ctrl+D), line deletion (Ctrl+Shift+L)
-- Selection via mouse and keyboard, click-and-drag text
+- Selection via mouse and keyboard, click-and-drag text with drop cursor preview
 - Auto-indent, smart Home key, bracket auto-close
 - Block indent/outdent (Tab/Shift+Tab on selection)
 - Case transform (Ctrl+U / Ctrl+Shift+U)
+- Ctrl+scroll wheel zoom (6pt–48pt), Shift+scroll horizontal scrolling
 - Go To Line dialog
-- Line numbers, current line highlight, scrollbars
+- Line numbers, current line highlight, scrollbars (gutter clips text area)
 - Built-in rulesets: C#, Python, JavaScript, Plain Text
+
+## Diagnostics System
+- **IDiagnosticProvider** interface: implement `List<Diagnostic> Analyze(string text)` to provide diagnostics
+- **DiagnosticSeverity**: Error (red squiggle), Warning (yellow squiggle), Info (green squiggle)
+- **CodeTextBox.DiagnosticProvider** property: set to auto-analyze on text change (500ms debounce)
+- **CodeTextBox.SetDiagnostics()** / **ClearDiagnostics()**: manually set/clear diagnostics
+- **CodeTextBox.DiagnosticsChanged** event: fires when diagnostics update
+- **Built-in providers**: CSharpDiagnosticProvider, PythonDiagnosticProvider, JavaScriptDiagnosticProvider
+  - Bracket/brace matching, missing semicolons/colons, empty catch blocks, unused variables, style warnings
 
 ## Keyboard Shortcuts
 - Ctrl+Z: Undo | Ctrl+Y / Ctrl+Shift+Z: Redo
@@ -60,3 +72,5 @@ build.sh                               - Mono build script (for Replit environme
 - Ctrl+[/]: Indent/Outdent selection
 - Home: Smart home (first non-whitespace / column 0)
 - Ctrl+Home/End: Document start/end
+- Ctrl+Scroll: Zoom in/out
+- Shift+Scroll: Horizontal scroll

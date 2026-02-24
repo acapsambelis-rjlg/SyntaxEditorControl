@@ -5,6 +5,8 @@ mcs -target:winexe -out:CodeEditor.exe \
     -r:System.Windows.Forms.dll \
     SyntaxEditor/SyntaxRule.cs \
     SyntaxEditor/TextDocument.cs \
+    SyntaxEditor/Diagnostic.cs \
+    SyntaxEditor/DiagnosticProviders.cs \
     SyntaxEditor/CodeTextBox.Designer.cs \
     SyntaxEditor/CodeTextBox.cs \
     SyntaxEditor/TestForm.Designer.cs \

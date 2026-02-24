@@ -53,6 +53,10 @@ namespace CodeEditor
                     components.Dispose();
                 if (_editorFont != null)
                     _editorFont.Dispose();
+                if (_diagnosticTimer != null)
+                    _diagnosticTimer.Dispose();
+                if (_diagnosticTooltip != null)
+                    _diagnosticTooltip.Dispose();
             }
             base.Dispose(disposing);
         }

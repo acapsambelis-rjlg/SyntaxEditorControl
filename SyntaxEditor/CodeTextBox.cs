@@ -46,6 +46,14 @@ namespace CodeEditor
         private Dictionary<int, List<MultiLineSpan>> _multiLineSpans;
         private bool _multiLineDirty = true;
 
+        private IDiagnosticProvider _diagnosticProvider;
+        private List<Diagnostic> _diagnostics = new List<Diagnostic>();
+        private Dictionary<int, List<Diagnostic>> _diagnosticsByLine = new Dictionary<int, List<Diagnostic>>();
+        private Timer _diagnosticTimer;
+        private ToolTip _diagnosticTooltip;
+        private int _lastTooltipLine = -1;
+        private int _lastTooltipCol = -1;
+
         private struct MultiLineSpan
         {
             public int StartLine;
@@ -84,7 +92,18 @@ namespace CodeEditor
 
             _caretTimer.Start();
 
-            _doc.TextChanged += (s, e) => { _multiLineDirty = true; if (_initialized) { UpdateScrollBars(); Invalidate(); } OnTextChanged(EventArgs.Empty); };
+            _doc.TextChanged += (s, e) => { _multiLineDirty = true; if (_initialized) { UpdateScrollBars(); Invalidate(); ScheduleDiagnosticUpdate(); } OnTextChanged(EventArgs.Empty); };
+
+            _diagnosticTimer = new Timer();
+            _diagnosticTimer.Interval = 500;
+            _diagnosticTimer.Tick += DiagnosticTimer_Tick;
+
+            _diagnosticTooltip = new ToolTip();
+            _diagnosticTooltip.InitialDelay = 200;
+            _diagnosticTooltip.ReshowDelay = 100;
+            _diagnosticTooltip.AutoPopDelay = 15000;
+            _diagnosticTooltip.UseAnimation = false;
+            _diagnosticTooltip.UseFading = false;
 
             MeasureCharSize();
             UpdateGutterWidth();
@@ -148,6 +167,36 @@ namespace CodeEditor
         public bool CanRedo => _doc.CanRedo;
 
         public TextDocument Document => _doc;
+
+        public IDiagnosticProvider DiagnosticProvider
+        {
+            get { return _diagnosticProvider; }
+            set
+            {
+                _diagnosticProvider = value;
+                RunDiagnostics();
+            }
+        }
+
+        public IReadOnlyList<Diagnostic> Diagnostics => _diagnostics.AsReadOnly();
+
+        public event EventHandler<DiagnosticsChangedEventArgs> DiagnosticsChanged;
+
+        public void SetDiagnostics(List<Diagnostic> diagnostics)
+        {
+            _diagnostics = diagnostics ?? new List<Diagnostic>();
+            RebuildDiagnosticIndex();
+            OnDiagnosticsChanged();
+            Invalidate();
+        }
+
+        public void ClearDiagnostics()
+        {
+            _diagnostics.Clear();
+            _diagnosticsByLine.Clear();
+            OnDiagnosticsChanged();
+            Invalidate();
+        }
 
         #endregion
 
@@ -367,6 +416,8 @@ namespace CodeEditor
                 float y = (i - _scrollY) * _lineHeight;
                 PaintLineText(g, i, y);
             }
+
+            PaintDiagnostics(g, firstLine, lastLine);
 
             if (Focused && _caretVisible)
             {
@@ -664,6 +715,8 @@ namespace CodeEditor
             else
             {
                 Cursor = (e.X > _gutterWidth) ? Cursors.IBeam : Cursors.Arrow;
+                if (e.X > _gutterWidth)
+                    UpdateDiagnosticTooltip(e.X, e.Y);
             }
         }
 
@@ -1442,6 +1495,145 @@ namespace CodeEditor
             base.OnResize(e);
             UpdateScrollBars();
             Invalidate();
+        }
+
+        #endregion
+
+        #region Diagnostics
+
+        private void ScheduleDiagnosticUpdate()
+        {
+            if (_diagnosticProvider == null) return;
+            _diagnosticTimer.Stop();
+            _diagnosticTimer.Start();
+        }
+
+        private void DiagnosticTimer_Tick(object sender, EventArgs e)
+        {
+            _diagnosticTimer.Stop();
+            RunDiagnostics();
+        }
+
+        private void RunDiagnostics()
+        {
+            if (_diagnosticProvider == null)
+            {
+                ClearDiagnostics();
+                return;
+            }
+
+            try
+            {
+                var results = _diagnosticProvider.Analyze(_doc.Text);
+                _diagnostics = results ?? new List<Diagnostic>();
+            }
+            catch
+            {
+                _diagnostics = new List<Diagnostic>();
+            }
+
+            RebuildDiagnosticIndex();
+            OnDiagnosticsChanged();
+            Invalidate();
+        }
+
+        private void RebuildDiagnosticIndex()
+        {
+            _diagnosticsByLine = new Dictionary<int, List<Diagnostic>>();
+            foreach (var d in _diagnostics)
+            {
+                if (!_diagnosticsByLine.ContainsKey(d.Line))
+                    _diagnosticsByLine[d.Line] = new List<Diagnostic>();
+                _diagnosticsByLine[d.Line].Add(d);
+            }
+        }
+
+        private void OnDiagnosticsChanged()
+        {
+            DiagnosticsChanged?.Invoke(this, new DiagnosticsChangedEventArgs(_diagnostics.AsReadOnly()));
+        }
+
+        private void PaintDiagnostics(Graphics g, int firstLine, int lastLine)
+        {
+            if (_diagnosticsByLine.Count == 0) return;
+
+            for (int line = firstLine; line <= lastLine; line++)
+            {
+                if (!_diagnosticsByLine.ContainsKey(line)) continue;
+
+                float y = (line - _scrollY) * _lineHeight;
+                float baseline = y + _lineHeight - 2;
+
+                foreach (var diag in _diagnosticsByLine[line])
+                {
+                    int len = Math.Max(1, diag.Length);
+                    float x1 = _gutterWidth + TextLeftPadding + diag.Column * _charWidth - _scrollX;
+                    float x2 = x1 + len * _charWidth;
+
+                    Color squiggleColor;
+                    switch (diag.Severity)
+                    {
+                        case DiagnosticSeverity.Error:
+                            squiggleColor = Color.FromArgb(255, 0, 0);
+                            break;
+                        case DiagnosticSeverity.Warning:
+                            squiggleColor = Color.FromArgb(206, 145, 0);
+                            break;
+                        default:
+                            squiggleColor = Color.FromArgb(0, 128, 0);
+                            break;
+                    }
+
+                    using (var pen = new Pen(squiggleColor, 1f))
+                    {
+                        float waveHeight = 2f;
+                        float waveWidth = 4f;
+                        var points = new List<PointF>();
+                        float cx = x1;
+                        bool up = true;
+                        while (cx < x2)
+                        {
+                            points.Add(new PointF(cx, up ? baseline - waveHeight : baseline));
+                            cx += waveWidth / 2;
+                            up = !up;
+                        }
+                        points.Add(new PointF(x2, up ? baseline - waveHeight : baseline));
+
+                        if (points.Count >= 2)
+                            g.DrawLines(pen, points.ToArray());
+                    }
+                }
+            }
+        }
+
+        private void UpdateDiagnosticTooltip(int mouseX, int mouseY)
+        {
+            var pos = PositionFromPoint(mouseX, mouseY);
+
+            if (pos.Line == _lastTooltipLine && pos.Column == _lastTooltipCol) return;
+            _lastTooltipLine = pos.Line;
+            _lastTooltipCol = pos.Column;
+
+            if (_diagnosticsByLine.ContainsKey(pos.Line))
+            {
+                foreach (var diag in _diagnosticsByLine[pos.Line])
+                {
+                    if (pos.Column >= diag.Column && pos.Column < diag.Column + Math.Max(1, diag.Length))
+                    {
+                        string prefix;
+                        switch (diag.Severity)
+                        {
+                            case DiagnosticSeverity.Error: prefix = "Error"; break;
+                            case DiagnosticSeverity.Warning: prefix = "Warning"; break;
+                            default: prefix = "Info"; break;
+                        }
+                        _diagnosticTooltip.Show($"{prefix}: {diag.Message}", this, mouseX + 10, mouseY + 15);
+                        return;
+                    }
+                }
+            }
+
+            _diagnosticTooltip.Hide(this);
         }
 
         #endregion

@@ -10,6 +10,7 @@ namespace CodeEditor
         {
             InitializeComponent();
 
+            _codeTextBox.DiagnosticsChanged += CodeTextBox_DiagnosticsChanged;
             _codeTextBox.Text = GetSampleCSharpCode();
             _languageSelector.SelectedIndex = 0;
         }
@@ -90,28 +91,51 @@ namespace CodeEditor
             {
                 case 0:
                     _codeTextBox.Ruleset = SyntaxRuleset.CreateCSharpRuleset();
+                    _codeTextBox.DiagnosticProvider = new CSharpDiagnosticProvider();
                     _codeTextBox.Text = GetSampleCSharpCode();
                     break;
                 case 1:
                     _codeTextBox.Ruleset = SyntaxRuleset.CreatePythonRuleset();
+                    _codeTextBox.DiagnosticProvider = new PythonDiagnosticProvider();
                     _codeTextBox.Text = GetSamplePythonCode();
                     break;
                 case 2:
                     _codeTextBox.Ruleset = SyntaxRuleset.CreateJavaScriptRuleset();
+                    _codeTextBox.DiagnosticProvider = new JavaScriptDiagnosticProvider();
                     _codeTextBox.Text = GetSampleJavaScriptCode();
                     break;
                 case 3:
                     _codeTextBox.Ruleset = SyntaxRuleset.CreatePlainTextRuleset();
+                    _codeTextBox.DiagnosticProvider = null;
                     _codeTextBox.Text = "Hello, World!\n\nThis is plain text mode with no syntax highlighting.\nYou can still use all the editing features:\n- Undo/Redo\n- Line duplication\n- Selection and drag\n- Auto-indent\n- And more!";
                     break;
             }
             UpdateStatus();
         }
 
+        private void CodeTextBox_DiagnosticsChanged(object sender, DiagnosticsChangedEventArgs e)
+        {
+            UpdateStatus();
+        }
+
         private void UpdateStatus()
         {
             var pos = _codeTextBox.CaretPosition;
-            _statusLabel.Text = $"Ln {pos.Line + 1}, Col {pos.Column + 1}  |  Lines: {_codeTextBox.LineCount}  |  {_codeTextBox.Ruleset.LanguageName}";
+            var diags = _codeTextBox.Diagnostics;
+            int errors = 0, warnings = 0, infos = 0;
+            foreach (var d in diags)
+            {
+                switch (d.Severity)
+                {
+                    case DiagnosticSeverity.Error: errors++; break;
+                    case DiagnosticSeverity.Warning: warnings++; break;
+                    case DiagnosticSeverity.Info: infos++; break;
+                }
+            }
+            string diagText = "";
+            if (errors > 0 || warnings > 0 || infos > 0)
+                diagText = $"  |  Errors: {errors}  Warnings: {warnings}  Info: {infos}";
+            _statusLabel.Text = $"Ln {pos.Line + 1}, Col {pos.Column + 1}  |  Lines: {_codeTextBox.LineCount}  |  {_codeTextBox.Ruleset.LanguageName}{diagText}";
         }
 
         private void ShowGoToLineDialog()
