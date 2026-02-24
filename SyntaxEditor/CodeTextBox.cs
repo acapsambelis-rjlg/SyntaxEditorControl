@@ -1117,10 +1117,34 @@ namespace CodeEditor
             string s = c.ToString();
             string closing = null;
 
-            if (c == ')' || c == ']' || c == '}' || c == '"' || c == '\'')
+            string line = _doc.GetLine(_caret.Line);
+            bool nextCharMatches = _caret.Column < line.Length && line[_caret.Column] == c;
+
+            if ((c == ')' || c == ']' || c == '}') && nextCharMatches)
             {
-                string line = _doc.GetLine(_caret.Line);
-                if (_caret.Column < line.Length && line[_caret.Column] == c)
+                _caret = new TextPosition(_caret.Line, _caret.Column + 1);
+                ClearSelection();
+                _desiredColumn = -1;
+                EnsureCaretVisible();
+                ResetCaretBlink();
+                return;
+            }
+
+            if ((c == '"' || c == '\'') && nextCharMatches)
+            {
+                bool prevCharMatches = _caret.Column > 0 && line[_caret.Column - 1] == c;
+                bool isTripleClose = _caret.Column >= 2 && line[_caret.Column - 1] == c && line[_caret.Column - 2] == c
+                    && _caret.Column + 2 < line.Length && line[_caret.Column + 1] == c && line[_caret.Column + 2] == c;
+                if (isTripleClose)
+                {
+                    _caret = new TextPosition(_caret.Line, _caret.Column + 3);
+                    ClearSelection();
+                    _desiredColumn = -1;
+                    EnsureCaretVisible();
+                    ResetCaretBlink();
+                    return;
+                }
+                if (prevCharMatches)
                 {
                     _caret = new TextPosition(_caret.Line, _caret.Column + 1);
                     ClearSelection();
@@ -1134,8 +1158,19 @@ namespace CodeEditor
             if (c == '(' ) closing = ")";
             else if (c == '[') closing = "]";
             else if (c == '{') closing = "}";
-            else if (c == '"') closing = "\"";
-            else if (c == '\'') closing = "'";
+            else if (c == '"' || c == '\'')
+            {
+                string q = c.ToString();
+                string before = line.Substring(0, _caret.Column);
+                if (before.EndsWith(q + q))
+                {
+                    closing = new string(c, 3);
+                }
+                else
+                {
+                    closing = q;
+                }
+            }
 
             if (closing != null)
             {
