@@ -27,6 +27,7 @@ namespace CodeEditor
         private bool _mouseDragging;
         private TextPosition _dragStart;
         private string _dragText;
+        private TextPosition _dragDropPos;
 
         private int _scrollX;
         private int _scrollY;
@@ -386,6 +387,17 @@ namespace CodeEditor
                 using (var pen = new Pen(_ruleset.CaretColor, 2f))
                     g.DrawLine(pen, cx, cy, cx, cy + _lineHeight);
             }
+
+            if (_mouseDragging)
+            {
+                float dx = _gutterWidth + TextLeftPadding + _dragDropPos.Column * _charWidth - _scrollX;
+                float dy = (_dragDropPos.Line - _scrollY) * _lineHeight;
+                using (var pen = new Pen(Color.FromArgb(160, _ruleset.CaretColor), 1.5f))
+                {
+                    pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+                    g.DrawLine(pen, dx, dy, dx, dy + _lineHeight);
+                }
+            }
         }
 
         private void PaintSelection(Graphics g, int firstLine, int lastLine)
@@ -626,6 +638,8 @@ namespace CodeEditor
             if (_mouseDragging)
             {
                 Cursor = Cursors.Arrow;
+                _dragDropPos = PositionFromPoint(e.X, e.Y);
+                Invalidate();
                 return;
             }
 
