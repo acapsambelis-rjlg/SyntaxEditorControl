@@ -77,6 +77,8 @@ namespace CodeEditor
         private IFoldingProvider _foldingProvider;
         private List<FoldRegion> _foldRegions = new List<FoldRegion>();
         private Dictionary<int, bool> _collapsedLines = new Dictionary<int, bool>();
+        private List<int> _visibleLinesList = new List<int>();
+        private Dictionary<int, int> _lineToVisibleIndex = new Dictionary<int, int>();
         private const int FoldMarginWidth = 14;
         private bool _foldingDirty = true;
 
@@ -131,6 +133,7 @@ namespace CodeEditor
             _doc.TextChanged += (s, e) => {
                 _multiLineDirty = true;
                 _foldingDirty = true;
+                RebuildVisibleLinesList();
                 if (_initialized) { UpdateScrollBars(); Invalidate(); ScheduleDiagnosticUpdate(); UpdateFindHighlights(); }
                 OnTextChanged(EventArgs.Empty);
             };
@@ -341,12 +344,15 @@ namespace CodeEditor
         {
             int textAreaHeight = ClientSize.Height - _hScrollBar.Height;
             int textAreaWidth = ClientSize.Width - _vScrollBar.Width - _gutterWidth;
-            int totalLines = _doc.LineCount;
+            int totalLines = GetVisibleLineCount();
             int visibleLines = Math.Max(1, (int)(textAreaHeight / _lineHeight));
 
             int maxLen = 0;
             for (int i = 0; i < _doc.LineCount; i++)
-                maxLen = Math.Max(maxLen, _doc.GetLineLength(i));
+            {
+                if (IsLineVisible(i))
+                    maxLen = Math.Max(maxLen, _doc.GetLineLength(i));
+            }
             int totalWidth = (int)(maxLen * _charWidth) + 200;
 
             _vScrollBar.Minimum = 0;
@@ -373,10 +379,11 @@ namespace CodeEditor
         private void EnsureCaretVisible()
         {
             int visibleLines = (int)(TextAreaHeight / _lineHeight);
-            if (_caret.Line < _scrollY)
-                _scrollY = _caret.Line;
-            else if (_caret.Line >= _scrollY + visibleLines)
-                _scrollY = _caret.Line - visibleLines + 1;
+            int caretVi = ActualToVisibleLine(_caret.Line);
+            if (caretVi < _scrollY)
+                _scrollY = caretVi;
+            else if (caretVi >= _scrollY + visibleLines)
+                _scrollY = caretVi - visibleLines + 1;
 
             float caretX = _caret.Column * _charWidth;
             if (caretX - _scrollX < 0)
@@ -385,7 +392,7 @@ namespace CodeEditor
                 _scrollX = (int)(caretX - TextAreaWidth + _charWidth * 6);
 
             _scrollX = Math.Max(0, _scrollX);
-            _scrollY = Math.Max(0, Math.Min(_scrollY, Math.Max(0, _doc.LineCount - 1)));
+            _scrollY = Math.Max(0, Math.Min(_scrollY, Math.Max(0, GetVisibleLineCount() - 1)));
             UpdateScrollBars();
         }
 
@@ -408,7 +415,8 @@ namespace CodeEditor
 
         private TextPosition PositionFromPoint(int x, int y)
         {
-            int line = (int)((y + _scrollY * _lineHeight) / _lineHeight);
+            int visibleRow = (int)(y / _lineHeight) + _scrollY;
+            int line = VisibleToActualLine(visibleRow);
             line = Math.Max(0, Math.Min(line, _doc.LineCount - 1));
             int col = (int)Math.Round((x - _gutterWidth + _scrollX - TextLeftPadding) / _charWidth);
             col = Math.Max(0, Math.Min(col, _doc.GetLineLength(line)));
@@ -473,39 +481,41 @@ namespace CodeEditor
 
             g.Clear(_ruleset.BackgroundColor);
 
-            int firstLine = _scrollY;
-            int lastLine = Math.Min(_doc.LineCount - 1, firstLine + VisibleLines);
+            int visibleCount = GetVisibleLineCount();
+            int firstVisIdx = _scrollY;
+            int lastVisIdx = Math.Min(visibleCount - 1, firstVisIdx + VisibleLines);
 
             var textClip = new Rectangle(_gutterWidth, 0, ClientSize.Width - _gutterWidth, ClientSize.Height);
             g.SetClip(textClip);
 
-            if (_highlightCurrentLine && _caret.Line >= firstLine && _caret.Line <= lastLine)
+            if (_highlightCurrentLine && IsLineVisible(_caret.Line))
             {
-                float y = (_caret.Line - _scrollY) * _lineHeight;
-                using (var brush = new SolidBrush(_ruleset.CurrentLineHighlight))
-                    g.FillRectangle(brush, _gutterWidth, y, ClientSize.Width - _gutterWidth - _vScrollBar.Width, _lineHeight);
+                float y = ScreenYForLine(_caret.Line);
+                if (y >= -_lineHeight && y < ClientSize.Height)
+                    using (var brush = new SolidBrush(_ruleset.CurrentLineHighlight))
+                        g.FillRectangle(brush, _gutterWidth, y, ClientSize.Width - _gutterWidth - _vScrollBar.Width, _lineHeight);
             }
 
             if (_hasSelection)
-                PaintSelection(g, firstLine, lastLine);
+                PaintSelection(g, firstVisIdx, lastVisIdx);
 
-            PaintFindHighlights(g, firstLine, lastLine);
+            PaintFindHighlights(g, firstVisIdx, lastVisIdx);
             PaintBracketMatching(g);
             PaintExtraCursors(g);
 
-            for (int i = firstLine; i <= lastLine; i++)
+            for (int vi = firstVisIdx; vi <= lastVisIdx; vi++)
             {
-                if (!IsLineVisible(i)) continue;
-                float y = (i - _scrollY) * _lineHeight;
-                PaintLineText(g, i, y);
+                int actualLine = VisibleToActualLine(vi);
+                float y = (vi - _scrollY) * _lineHeight;
+                PaintLineText(g, actualLine, y);
             }
 
-            PaintDiagnostics(g, firstLine, lastLine);
+            PaintDiagnostics(g, firstVisIdx, lastVisIdx);
 
-            if (Focused && _caretVisible)
+            if (Focused && _caretVisible && IsLineVisible(_caret.Line))
             {
                 float cx = _gutterWidth + TextLeftPadding + _caret.Column * _charWidth - _scrollX;
-                float cy = (_caret.Line - _scrollY) * _lineHeight;
+                float cy = ScreenYForLine(_caret.Line);
                 using (var pen = new Pen(_ruleset.CaretColor, 2f))
                     g.DrawLine(pen, cx, cy, cx, cy + _lineHeight);
             }
@@ -513,7 +523,7 @@ namespace CodeEditor
             if (_mouseDragging)
             {
                 float dx = _gutterWidth + TextLeftPadding + _dragDropPos.Column * _charWidth - _scrollX;
-                float dy = (_dragDropPos.Line - _scrollY) * _lineHeight;
+                float dy = ScreenYForLine(_dragDropPos.Line);
                 using (var pen = new Pen(Color.FromArgb(160, _ruleset.CaretColor), 1.5f))
                 {
                     pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
@@ -533,17 +543,17 @@ namespace CodeEditor
                 using (var pen = new Pen(_ruleset.GutterSeparatorColor))
                     g.DrawLine(pen, _gutterWidth - 1, 0, _gutterWidth - 1, ClientSize.Height);
 
-                for (int i = firstLine; i <= lastLine; i++)
+                for (int vi = firstVisIdx; vi <= lastVisIdx; vi++)
                 {
-                    if (!IsLineVisible(i)) continue;
-                    float y = (i - _scrollY) * _lineHeight;
-                    string num = (i + 1).ToString();
-                    using (var brush = new SolidBrush(i == _caret.Line ? _ruleset.ActiveLineNumberColor : _ruleset.LineNumberForeColor))
+                    int actualLine = VisibleToActualLine(vi);
+                    float y = (vi - _scrollY) * _lineHeight;
+                    string num = (actualLine + 1).ToString();
+                    using (var brush = new SolidBrush(actualLine == _caret.Line ? _ruleset.ActiveLineNumberColor : _ruleset.LineNumberForeColor))
                     {
                         float numX = lineNumWidth - GutterPadding - g.MeasureString(num, _editorFont, 0, StringFormat.GenericTypographic).Width;
                         g.DrawString(num, _editorFont, brush, numX, y, StringFormat.GenericTypographic);
                     }
-                    PaintFoldMargin(g, (int)y, i);
+                    PaintFoldMargin(g, (int)y, actualLine);
                 }
             }
             else if (_foldingProvider != null)
@@ -551,23 +561,26 @@ namespace CodeEditor
                 using (var gutterBrush = new SolidBrush(_ruleset.LineNumberBackColor))
                     g.FillRectangle(gutterBrush, 0, 0, _gutterWidth, ClientSize.Height);
 
-                for (int i = firstLine; i <= lastLine; i++)
+                for (int vi = firstVisIdx; vi <= lastVisIdx; vi++)
                 {
-                    if (!IsLineVisible(i)) continue;
-                    float y = (i - _scrollY) * _lineHeight;
-                    PaintFoldMargin(g, (int)y, i);
+                    int actualLine = VisibleToActualLine(vi);
+                    float y = (vi - _scrollY) * _lineHeight;
+                    PaintFoldMargin(g, (int)y, actualLine);
                 }
             }
         }
 
-        private void PaintSelection(Graphics g, int firstLine, int lastLine)
+        private void PaintSelection(Graphics g, int firstVisIdx, int lastVisIdx)
         {
             var range = GetSelectionRange();
             using (var brush = new SolidBrush(_ruleset.SelectionColor))
             {
-                for (int i = Math.Max(range.Start.Line, firstLine); i <= Math.Min(range.End.Line, lastLine); i++)
+                for (int i = range.Start.Line; i <= range.End.Line; i++)
                 {
-                    float y = (i - _scrollY) * _lineHeight;
+                    if (!IsLineVisible(i)) continue;
+                    float y = ScreenYForLine(i);
+                    if (y + _lineHeight < 0 || y > ClientSize.Height) continue;
+
                     int startCol = (i == range.Start.Line) ? range.Start.Column : 0;
                     int endCol = (i == range.End.Line) ? range.End.Column : _doc.GetLineLength(i);
 
@@ -770,7 +783,8 @@ namespace CodeEditor
                 if (_foldingProvider != null && e.X >= _gutterWidth - FoldMarginWidth && e.X < _gutterWidth)
                 {
                     RebuildFoldRegions();
-                    int line = (int)(e.Y / _lineHeight) + _scrollY;
+                    int visRow = (int)(e.Y / _lineHeight) + _scrollY;
+                    int line = VisibleToActualLine(visRow);
                     if (line >= 0 && line < _doc.LineCount)
                     {
                         var region = GetFoldRegionForLine(line);
@@ -945,7 +959,7 @@ namespace CodeEditor
             }
 
             int delta = -(e.Delta / 120) * 3;
-            _scrollY = Math.Max(0, Math.Min(_scrollY + delta, Math.Max(0, _doc.LineCount - 1)));
+            _scrollY = Math.Max(0, Math.Min(_scrollY + delta, Math.Max(0, GetVisibleLineCount() - 1)));
             UpdateScrollBars();
             Invalidate();
         }
@@ -1343,7 +1357,7 @@ namespace CodeEditor
                 }
                 else if (ctrl && lineDir > 0)
                 {
-                    _scrollY = Math.Min(Math.Max(0, _doc.LineCount - 1), _scrollY + 1);
+                    _scrollY = Math.Min(Math.Max(0, GetVisibleLineCount() - 1), _scrollY + 1);
                     UpdateScrollBars();
                     Invalidate();
                     return;
@@ -1458,7 +1472,7 @@ namespace CodeEditor
             }
 
             _scrollY += direction * pageLines;
-            _scrollY = Math.Max(0, Math.Min(_scrollY, Math.Max(0, _doc.LineCount - 1)));
+            _scrollY = Math.Max(0, Math.Min(_scrollY, Math.Max(0, GetVisibleLineCount() - 1)));
             UpdateScrollBars();
             EnsureCaretVisible();
             ResetCaretBlink();
@@ -1744,15 +1758,16 @@ namespace CodeEditor
             DiagnosticsChanged?.Invoke(this, new DiagnosticsChangedEventArgs(_diagnostics.AsReadOnly()));
         }
 
-        private void PaintDiagnostics(Graphics g, int firstLine, int lastLine)
+        private void PaintDiagnostics(Graphics g, int firstVisIdx, int lastVisIdx)
         {
             if (_diagnosticsByLine.Count == 0) return;
 
-            for (int line = firstLine; line <= lastLine; line++)
+            for (int vi = firstVisIdx; vi <= lastVisIdx; vi++)
             {
+                int line = VisibleToActualLine(vi);
                 if (!_diagnosticsByLine.ContainsKey(line)) continue;
 
-                float y = (line - _scrollY) * _lineHeight;
+                float y = (vi - _scrollY) * _lineHeight;
                 float baseline = y + _lineHeight - 2;
 
                 foreach (var diag in _diagnosticsByLine[line])
@@ -1928,8 +1943,9 @@ namespace CodeEditor
             {
                 foreach (var pos in new[] { _matchBracketA.Value, _matchBracketB.Value })
                 {
+                    if (!IsLineVisible(pos.Line)) continue;
                     float x = _gutterWidth + TextLeftPadding + pos.Column * _charWidth - _scrollX;
-                    float y = (pos.Line - _scrollY) * _lineHeight;
+                    float y = ScreenYForLine(pos.Line);
                     g.FillRectangle(brush, x, y, _charWidth, _lineHeight);
                 }
             }
@@ -1938,8 +1954,9 @@ namespace CodeEditor
             {
                 foreach (var pos in new[] { _matchBracketA.Value, _matchBracketB.Value })
                 {
+                    if (!IsLineVisible(pos.Line)) continue;
                     float x = _gutterWidth + TextLeftPadding + pos.Column * _charWidth - _scrollX;
-                    float y = (pos.Line - _scrollY) * _lineHeight;
+                    float y = ScreenYForLine(pos.Line);
                     g.DrawRectangle(pen, x, y, _charWidth, _lineHeight);
                 }
             }
@@ -2222,7 +2239,7 @@ namespace CodeEditor
             UpdateFindHighlights();
         }
 
-        private void PaintFindHighlights(Graphics g, int firstLine, int lastLine)
+        private void PaintFindHighlights(Graphics g, int firstVisIdx, int lastVisIdx)
         {
             if (_findMatches.Count == 0) return;
 
@@ -2234,9 +2251,11 @@ namespace CodeEditor
 
                 using (var brush = new SolidBrush(color))
                 {
-                    for (int ln = Math.Max(match.Start.Line, firstLine); ln <= Math.Min(match.End.Line, lastLine); ln++)
+                    for (int ln = match.Start.Line; ln <= match.End.Line; ln++)
                     {
-                        float y = (ln - _scrollY) * _lineHeight;
+                        if (!IsLineVisible(ln)) continue;
+                        float y = ScreenYForLine(ln);
+                        if (y + _lineHeight < 0 || y > ClientSize.Height) continue;
                         int startCol = (ln == match.Start.Line) ? match.Start.Column : 0;
                         int endCol = (ln == match.End.Line) ? match.End.Column : _doc.GetLineLength(ln);
                         float x1 = _gutterWidth + TextLeftPadding + startCol * _charWidth - _scrollX;
@@ -2285,6 +2304,21 @@ namespace CodeEditor
                         _collapsedLines[i] = true;
                 }
             }
+            RebuildVisibleLinesList();
+        }
+
+        private void RebuildVisibleLinesList()
+        {
+            _visibleLinesList.Clear();
+            _lineToVisibleIndex.Clear();
+            for (int i = 0; i < _doc.LineCount; i++)
+            {
+                if (!_collapsedLines.ContainsKey(i))
+                {
+                    _lineToVisibleIndex[i] = _visibleLinesList.Count;
+                    _visibleLinesList.Add(i);
+                }
+            }
         }
 
         private bool IsLineVisible(int line)
@@ -2294,32 +2328,38 @@ namespace CodeEditor
 
         private int GetVisibleLineCount()
         {
-            int count = 0;
-            for (int i = 0; i < _doc.LineCount; i++)
-                if (IsLineVisible(i)) count++;
-            return count;
+            return _visibleLinesList.Count > 0 ? _visibleLinesList.Count : _doc.LineCount;
         }
 
         private int VisibleToActualLine(int visibleIndex)
         {
-            int count = 0;
-            for (int i = 0; i < _doc.LineCount; i++)
-            {
-                if (IsLineVisible(i))
-                {
-                    if (count == visibleIndex) return i;
-                    count++;
-                }
-            }
-            return _doc.LineCount - 1;
+            if (visibleIndex < 0) return 0;
+            if (_visibleLinesList.Count == 0)
+                return Math.Max(0, Math.Min(visibleIndex, _doc.LineCount - 1));
+            if (visibleIndex >= _visibleLinesList.Count)
+                return _visibleLinesList[_visibleLinesList.Count - 1];
+            return _visibleLinesList[visibleIndex];
         }
 
         private int ActualToVisibleLine(int actualLine)
         {
-            int count = 0;
-            for (int i = 0; i < actualLine && i < _doc.LineCount; i++)
-                if (IsLineVisible(i)) count++;
-            return count;
+            if (_lineToVisibleIndex.Count == 0)
+                return actualLine;
+            int vi;
+            if (_lineToVisibleIndex.TryGetValue(actualLine, out vi))
+                return vi;
+            for (int i = actualLine; i >= 0; i--)
+            {
+                if (_lineToVisibleIndex.TryGetValue(i, out vi))
+                    return vi;
+            }
+            return 0;
+        }
+
+        private float ScreenYForLine(int actualLine)
+        {
+            int vi = ActualToVisibleLine(actualLine);
+            return (vi - _scrollY) * _lineHeight;
         }
 
         private void ToggleFold(int line)
@@ -2448,10 +2488,10 @@ namespace CodeEditor
                 _completionList.Items.Add(item.Text);
 
             float cx = _gutterWidth + TextLeftPadding + (_caret.Column - partial.Length) * _charWidth - _scrollX;
-            float cy = (_caret.Line - _scrollY + 1) * _lineHeight;
+            float cy = ScreenYForLine(_caret.Line) + _lineHeight;
 
             if (cy + _completionList.Height > ClientSize.Height - _hScrollBar.Height)
-                cy = (_caret.Line - _scrollY) * _lineHeight - _completionList.Height;
+                cy = ScreenYForLine(_caret.Line) - _completionList.Height;
 
             _completionList.Location = new Point((int)cx, (int)cy);
             _completionList.SelectedIndex = 0;
@@ -2628,10 +2668,11 @@ namespace CodeEditor
         private void EnsurePositionVisible(TextPosition pos)
         {
             int visibleLines = Math.Max(1, (int)(TextAreaHeight / _lineHeight));
-            if (pos.Line < _scrollY)
-                _scrollY = pos.Line;
-            else if (pos.Line >= _scrollY + visibleLines)
-                _scrollY = pos.Line - visibleLines + 1;
+            int posVi = ActualToVisibleLine(pos.Line);
+            if (posVi < _scrollY)
+                _scrollY = posVi;
+            else if (posVi >= _scrollY + visibleLines)
+                _scrollY = posVi - visibleLines + 1;
             UpdateScrollBars();
         }
 
@@ -2723,7 +2764,8 @@ namespace CodeEditor
                     {
                         for (int ln = range.Start.Line; ln <= range.End.Line; ln++)
                         {
-                            float y = (ln - _scrollY) * _lineHeight;
+                            if (!IsLineVisible(ln)) continue;
+                            float y = ScreenYForLine(ln);
                             int startCol = (ln == range.Start.Line) ? range.Start.Column : 0;
                             int endCol = (ln == range.End.Line) ? range.End.Column : _doc.GetLineLength(ln);
                             float x1 = _gutterWidth + TextLeftPadding + startCol * _charWidth - _scrollX;
@@ -2733,10 +2775,10 @@ namespace CodeEditor
                     }
                 }
 
-                if (_caretVisible)
+                if (_caretVisible && IsLineVisible(_carets[i].Line))
                 {
                     float cx = _gutterWidth + TextLeftPadding + _carets[i].Column * _charWidth - _scrollX;
-                    float cy = (_carets[i].Line - _scrollY) * _lineHeight;
+                    float cy = ScreenYForLine(_carets[i].Line);
                     using (var pen = new Pen(_ruleset.CaretColor, 2f))
                         g.DrawLine(pen, cx, cy, cx, cy + _lineHeight);
                 }
